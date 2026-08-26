@@ -22,32 +22,48 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.3.1'
 
       - name: Prepare Environment and Keystore
         run: |
-          # Ensure .env exists for Secrets Gradle plugin
-          if [ -f .env.example ]; then
-            cp -n .env.example .env || true
-          else
-            touch .env
+          # 1. Ensure .env and .env.example exist for Secrets Gradle plugin
+          if [ ! -f .env.example ]; then
+            touch .env.example
+          fi
+          if [ ! -f .env ]; then
+            cp .env.example .env 2>/dev/null || touch .env
           fi
 
-          # Ensure debug.keystore exists for signingConfigs.debugConfig
+          # 2. Decode debug.keystore from base64 if present, or generate a valid debug key
           if [ -f debug.keystore.base64 ]; then
-            base64 -d debug.keystore.base64 > debug.keystore
-          elif [ ! -f debug.keystore ]; then
-            keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+            base64 --decode debug.keystore.base64 > debug.keystore 2>/dev/null || base64 -d debug.keystore.base64 > debug.keystore
+          fi
+          if [ ! -s debug.keystore ]; then
+            keytool -genkeypair -noprompt \
+              -keystore debug.keystore \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
           fi
 
-          # Make gradlew executable if present
-          if [ -f gradlew ]; then
-            chmod +x gradlew
+          # 3. Ensure Gradle wrapper exists and is executable
+          if [ ! -f gradlew ]; then
+            gradle wrapper --gradle-version 9.3.1 --distribution-type bin
           fi
+          chmod +x gradlew
 
-      - name: Build with Gradle
-        run: ./gradlew assembleDebug --stacktrace
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug --stacktrace --no-daemon
 
       - name: Upload Debug APK Artifact
         uses: actions/upload-artifact@v4
