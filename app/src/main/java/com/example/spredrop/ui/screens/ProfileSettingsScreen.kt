@@ -49,6 +49,14 @@ fun ProfileSettingsScreen(
     var showEditProfileDialog by remember { mutableStateOf(false) }
     var showLogsDialog by remember { mutableStateOf(false) }
     var showAuthDialog by remember { mutableStateOf(false) }
+    var showFirebaseSetupDialog by remember { mutableStateOf(false) }
+
+    if (showFirebaseSetupDialog) {
+        com.example.spredrop.ui.components.FirebaseSetupDialog(
+            viewModel = viewModel,
+            onDismiss = { showFirebaseSetupDialog = false }
+        )
+    }
 
     if (showAuthDialog) {
         FirebaseAuthDialog(
@@ -305,14 +313,14 @@ fun ProfileSettingsScreen(
                             }
 
                             OutlinedButton(
-                                onClick = { viewModel.syncWithFirestoreNow() },
+                                onClick = { showFirebaseSetupDialog = true },
                                 shape = RoundedCornerShape(12.dp),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.surfaceVariant),
-                                modifier = Modifier.weight(1f).testTag("sync_firestore_button")
+                                border = androidx.compose.foundation.BorderStroke(1.dp, SpreTealPrimary.copy(alpha = 0.6f)),
+                                modifier = Modifier.weight(1f).testTag("configure_firebase_button")
                             ) {
-                                Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(16.dp), tint = SpreTealPrimary)
+                                Icon(Icons.Default.Settings, contentDescription = null, modifier = Modifier.size(16.dp), tint = SpreTealPrimary)
                                 Spacer(Modifier.width(6.dp))
-                                Text("Sync Firestore", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface)
+                                Text("Configure Cloud", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface)
                             }
                         }
                     }

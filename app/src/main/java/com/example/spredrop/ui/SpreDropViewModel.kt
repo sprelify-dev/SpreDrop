@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.spredrop.data.SpreDropRepository
 import com.example.spredrop.data.StorageStats
 import com.example.spredrop.data.firebase.AuthState
+import com.example.spredrop.data.firebase.FirebaseConfig
 import com.example.spredrop.data.firebase.FirestoreConnectionState
 import com.example.spredrop.model.*
 import com.example.spredrop.security.QrCodeGenerator
@@ -46,7 +47,7 @@ class SpreDropViewModel(application: Application) : AndroidViewModel(application
 
     // Firebase Auth & Firestore State
     val authState: StateFlow<AuthState> = repository.authState
-    val currentFirebaseUser: FirebaseUser?
+    val currentFirebaseUser: AuthenticatedAccount?
         get() = repository.currentFirebaseUser
     val firestoreConnectionState: StateFlow<FirestoreConnectionState> = repository.firestoreConnectionState
     val lastSyncTimestamp: StateFlow<Long> = repository.lastSyncTimestamp
@@ -252,7 +253,7 @@ class SpreDropViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             val result = repository.signOut()
             if (result.isSuccess) {
-                _userMessage.value = "Signed out of Firebase"
+                _userMessage.value = "Signed out successfully. Please log in to continue."
             }
         }
     }
@@ -261,9 +262,20 @@ class SpreDropViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             val result = repository.sendPasswordReset(email)
             if (result.isSuccess) {
-                _userMessage.value = "Password reset email sent to $email"
+                _userMessage.value = "Password reset instructions sent for $email"
             } else {
                 _userMessage.value = "Reset error: ${result.exceptionOrNull()?.message}"
+            }
+        }
+    }
+
+    fun resetPasswordWithNew(email: String, newPass: String) {
+        viewModelScope.launch {
+            val result = repository.resetPasswordWithNew(email, newPass)
+            if (result.isSuccess) {
+                _userMessage.value = "Password updated successfully. You can now log in."
+            } else {
+                _userMessage.value = "Password update error: ${result.exceptionOrNull()?.message}"
             }
         }
     }
@@ -275,6 +287,25 @@ class SpreDropViewModel(application: Application) : AndroidViewModel(application
                 _userMessage.value = "Cloud Firestore synchronized successfully"
             } else {
                 _userMessage.value = "Cloud sync note: ${result.exceptionOrNull()?.message ?: "Completed"}"
+            }
+        }
+    }
+
+    private val _firebaseConfig = MutableStateFlow<FirebaseConfig>(repository.getFirebaseConfig())
+    val firebaseConfig: StateFlow<FirebaseConfig> = _firebaseConfig.asStateFlow()
+
+    fun refreshFirebaseConfig() {
+        _firebaseConfig.value = repository.getFirebaseConfig()
+    }
+
+    fun updateFirebaseConfig(projectId: String, apiKey: String, appId: String) {
+        viewModelScope.launch {
+            val result = repository.updateFirebaseConfig(projectId, apiKey, appId)
+            if (result.isSuccess) {
+                _firebaseConfig.value = repository.getFirebaseConfig()
+                _userMessage.value = "Firebase Cloud & Database configuration saved"
+            } else {
+                _userMessage.value = "Config error: ${result.exceptionOrNull()?.message}"
             }
         }
     }

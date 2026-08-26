@@ -9,6 +9,7 @@ import android.webkit.MimeTypeMap
 import androidx.core.content.FileProvider
 import com.example.spredrop.data.firebase.AuthState
 import com.example.spredrop.data.firebase.FirebaseAuthManager
+import com.example.spredrop.data.firebase.FirebaseConfig
 import com.example.spredrop.data.firebase.FirebaseDatabaseManager
 import com.example.spredrop.data.firebase.FirestoreConnectionState
 import com.example.spredrop.data.local.SpreDropDatabase
@@ -55,7 +56,7 @@ class SpreDropRepository(private val context: Context) {
     private val repoScope = CoroutineScope(Dispatchers.IO)
 
     val authState: StateFlow<AuthState> = authManager.authState
-    val currentFirebaseUser: FirebaseUser?
+    val currentFirebaseUser: AuthenticatedAccount?
         get() = authManager.currentUser
     val firestoreConnectionState: StateFlow<FirestoreConnectionState> = databaseManager.connectionState
     val lastSyncTimestamp: StateFlow<Long> = databaseManager.lastSyncTimestamp
@@ -79,19 +80,18 @@ class SpreDropRepository(private val context: Context) {
 
     init {
         repoScope.launch {
-            initProfileFromAuthIfNeeded()
-            setupFirebaseSync()
+            setupAuthSync()
         }
     }
 
-    private suspend fun setupFirebaseSync() {
-        // Observe auth state changes to synchronize profile
-        authManager.userFlow.collect { user ->
-            if (user != null) {
+    private suspend fun setupAuthSync() {
+        authManager.authState.collect { state ->
+            if (state is AuthState.Authenticated) {
+                val user = state.user
                 val current = userDao.getUserProfileOnce()
-                val realDisplayName = if (!user.displayName.isNullOrBlank()) user.displayName!! else current?.displayName ?: "SpreDrop User"
+                val realDisplayName = if (!user.displayName.isNullOrBlank()) user.displayName else current?.displayName ?: "SpreDrop User"
                 val realHandle = if (!user.email.isNullOrBlank()) {
-                    "@" + user.email!!.substringBefore("@").replace(".", "_")
+                    "@" + user.email.substringBefore("@").replace(".", "_")
                 } else if (current != null && current.spreDropId.isNotBlank()) {
                     current.spreDropId
                 } else {
@@ -102,7 +102,7 @@ class SpreDropRepository(private val context: Context) {
                     userId = user.uid,
                     spreDropId = realHandle,
                     displayName = realDisplayName,
-                    profilePhotoUri = user.photoUrl?.toString() ?: current?.profilePhotoUri,
+                    profilePhotoUri = user.photoUrl ?: current?.profilePhotoUri,
                     avatarColorHex = current?.avatarColorHex ?: "#00B4D8",
                     visibility = current?.visibility ?: PrivacyMode.VISIBLE,
                     availability = current?.availability ?: UserPresence.AVAILABLE,
@@ -121,26 +121,6 @@ class SpreDropRepository(private val context: Context) {
                     isOnline = true
                 )
             }
-        }
-    }
-
-    private suspend fun initProfileFromAuthIfNeeded() {
-        val existingProfile = userDao.getUserProfileOnce()
-        val user = authManager.currentUser
-        if (existingProfile == null && user != null) {
-            val defaultProfile = UserProfile(
-                userId = user.uid,
-                spreDropId = if (!user.email.isNullOrBlank()) "@" + user.email!!.substringBefore("@").replace(".", "_") else "@" + user.uid.take(6),
-                displayName = user.displayName ?: "SpreDrop User",
-                avatarColorHex = "#00B4D8",
-                visibility = PrivacyMode.VISIBLE,
-                availability = UserPresence.AVAILABLE,
-                deviceModel = "${android.os.Build.MANUFACTURER.replaceFirstChar { it.uppercase() }} ${android.os.Build.MODEL}",
-                createdAt = System.currentTimeMillis(),
-                lastSeen = System.currentTimeMillis()
-            )
-            userDao.insertOrUpdateProfile(defaultProfile)
-            databaseManager.uploadUserProfile(defaultProfile)
         }
     }
 
@@ -187,7 +167,7 @@ class SpreDropRepository(private val context: Context) {
         return uploadResult
     }
 
-    suspend fun signInWithEmail(email: String, pass: String): Result<FirebaseUser> {
+    suspend fun signInWithEmail(email: String, pass: String): Result<AuthenticatedAccount> {
         val result = authManager.signInWithEmail(email, pass)
         if (result.isSuccess) {
             syncWithFirestoreNow()
@@ -195,44 +175,18 @@ class SpreDropRepository(private val context: Context) {
         return result
     }
 
-    suspend fun signUpWithEmail(email: String, pass: String, displayName: String, spreDropId: String): Result<FirebaseUser> {
+    suspend fun signUpWithEmail(email: String, pass: String, displayName: String, spreDropId: String): Result<AuthenticatedAccount> {
         val result = authManager.signUpWithEmail(email, pass, displayName, spreDropId)
         if (result.isSuccess) {
-            val user = result.getOrNull()
-            if (user != null) {
-                val newProfile = UserProfile(
-                    userId = user.uid,
-                    spreDropId = if (spreDropId.startsWith("@")) spreDropId else "@$spreDropId",
-                    displayName = displayName.ifBlank { "User" },
-                    deviceModel = "${android.os.Build.MANUFACTURER.replaceFirstChar { it.uppercase() }} ${android.os.Build.MODEL}",
-                    createdAt = System.currentTimeMillis(),
-                    lastSeen = System.currentTimeMillis()
-                )
-                userDao.insertOrUpdateProfile(newProfile)
-                databaseManager.uploadUserProfile(newProfile)
-            }
+            syncWithFirestoreNow()
         }
         return result
     }
 
-    suspend fun signInWithGoogle(webClientId: String? = null): Result<FirebaseUser> {
+    suspend fun signInWithGoogle(webClientId: String? = null): Result<AuthenticatedAccount> {
         val result = authManager.signInWithGoogle(webClientId)
         if (result.isSuccess) {
-            val user = result.getOrNull()
-            if (user != null) {
-                val current = userDao.getUserProfileOnce()
-                val profile = UserProfile(
-                    userId = user.uid,
-                    spreDropId = "@" + (user.email?.substringBefore("@")?.replace(".", "_") ?: user.uid.take(6)),
-                    displayName = user.displayName ?: current?.displayName ?: "Google User",
-                    profilePhotoUri = user.photoUrl?.toString(),
-                    deviceModel = "${android.os.Build.MANUFACTURER.replaceFirstChar { it.uppercase() }} ${android.os.Build.MODEL}",
-                    createdAt = System.currentTimeMillis(),
-                    lastSeen = System.currentTimeMillis()
-                )
-                userDao.insertOrUpdateProfile(profile)
-                databaseManager.uploadUserProfile(profile)
-            }
+            syncWithFirestoreNow()
         }
         return result
     }
@@ -243,6 +197,22 @@ class SpreDropRepository(private val context: Context) {
 
     suspend fun sendPasswordReset(email: String): Result<Unit> {
         return authManager.sendPasswordReset(email)
+    }
+
+    suspend fun resetPasswordWithNew(email: String, newPass: String): Result<Unit> {
+        return authManager.resetPasswordWithNew(email, newPass)
+    }
+
+    fun getFirebaseConfig(): FirebaseConfig {
+        return authManager.getFirebaseConfig()
+    }
+
+    suspend fun updateFirebaseConfig(projectId: String, apiKey: String, appId: String): Result<Unit> {
+        val result = authManager.updateFirebaseConfig(projectId, apiKey, appId)
+        if (result.isSuccess) {
+            syncWithFirestoreNow()
+        }
+        return result
     }
 
     fun clearAuthError() {

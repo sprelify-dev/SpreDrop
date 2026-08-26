@@ -88,6 +88,29 @@ data class UserProfile(
 )
 
 /**
+ * User Account Credential Entity for Registered Users
+ */
+@Entity(tableName = "user_accounts")
+data class UserAccount(
+    @PrimaryKey val email: String,
+    val passwordHash: String,
+    val userId: String,
+    val spreDropId: String,
+    val displayName: String,
+    val createdAt: Long = System.currentTimeMillis()
+)
+
+/**
+ * Clean Unified Authenticated User Representation
+ */
+data class AuthenticatedAccount(
+    val uid: String,
+    val email: String? = null,
+    val displayName: String? = null,
+    val photoUrl: String? = null
+)
+
+/**
  * Friend Entity
  */
 @Entity(tableName = "friends")

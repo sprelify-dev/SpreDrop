@@ -50,6 +50,15 @@ fun AuthScreen(
     var displayName by remember { mutableStateOf("") }
     var spreDropId by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
+    var showForgotPasswordDialog by remember { mutableStateOf(false) }
+    var showFirebaseSetupDialog by remember { mutableStateOf(false) }
+
+    if (showFirebaseSetupDialog) {
+        com.example.spredrop.ui.components.FirebaseSetupDialog(
+            viewModel = viewModel,
+            onDismiss = { showFirebaseSetupDialog = false }
+        )
+    }
 
     val focusManager = LocalFocusManager.current
     val scrollState = rememberScrollState()
@@ -95,17 +104,17 @@ fun AuthScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = Icons.Default.Radar,
-                    contentDescription = "SpreDrop Logo",
+                    imageVector = Icons.Default.Lock,
+                    contentDescription = "SpreDrop Secure Access",
                     tint = Color.White,
-                    modifier = Modifier.size(40.dp)
+                    modifier = Modifier.size(38.dp)
                 )
             }
 
             Spacer(modifier = Modifier.height(16.dp))
 
             Text(
-                text = "SpreDrop",
+                text = "SpreDrop Account",
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
                 color = Color.White,
@@ -113,7 +122,7 @@ fun AuthScreen(
             )
 
             Text(
-                text = "Real proximity file sharing & cloud presence",
+                text = "Sign in or create an account to access SpreDrop P2P transfer network",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
@@ -144,7 +153,7 @@ fun AuthScreen(
                             .padding(4.dp)
                     ) {
                         TabButton(
-                            text = "Sign In",
+                            text = "Log In",
                             selected = !isSignUp,
                             onClick = {
                                 isSignUp = false
@@ -205,7 +214,7 @@ fun AuthScreen(
                             leadingIcon = {
                                 Icon(Icons.Outlined.Person, contentDescription = null, tint = SpreTealPrimary)
                             },
-                            placeholder = { Text("e.g. John Doe") },
+                            placeholder = { Text("e.g. Rahul Sharma") },
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(
                                 keyboardType = KeyboardType.Text,
@@ -227,7 +236,7 @@ fun AuthScreen(
                             onValueChange = { input ->
                                 spreDropId = if (input.startsWith("@")) input else "@$input"
                             },
-                            label = { Text("SpreDrop Handle") },
+                            label = { Text("SpreDrop ID Handle") },
                             leadingIcon = {
                                 Icon(Icons.Outlined.AlternateEmail, contentDescription = null, tint = SpreCyanAccent)
                             },
@@ -276,7 +285,7 @@ fun AuthScreen(
                     OutlinedTextField(
                         value = password,
                         onValueChange = { password = it },
-                        label = { Text("Password") },
+                        label = { Text("Password (min 6 characters)") },
                         leadingIcon = {
                             Icon(Icons.Outlined.Lock, contentDescription = null, tint = SpreTealPrimary)
                         },
@@ -311,7 +320,29 @@ fun AuthScreen(
                             .testTag("auth_password_input")
                     )
 
-                    Spacer(modifier = Modifier.height(20.dp))
+                    if (!isSignUp) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 4.dp),
+                            contentAlignment = Alignment.CenterEnd
+                        ) {
+                            TextButton(
+                                onClick = { showForgotPasswordDialog = true },
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+                            ) {
+                                Text(
+                                    text = "Forgot Password?",
+                                    fontSize = 12.sp,
+                                    color = SpreTealPrimary
+                                )
+                            }
+                        }
+                    } else {
+                        Spacer(modifier = Modifier.height(16.dp))
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
 
                     // Main Action Button
                     Button(
@@ -341,7 +372,7 @@ fun AuthScreen(
                             )
                         } else {
                             Text(
-                                text = if (isSignUp) "Create SpreDrop Account" else "Sign In",
+                                text = if (isSignUp) "Create SpreDrop Account" else "Log In to SpreDrop",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 15.sp
                             )
@@ -391,7 +422,7 @@ fun AuthScreen(
                         )
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
-                            text = "Continue with Google",
+                            text = "Sign in with Google",
                             fontWeight = FontWeight.SemiBold,
                             fontSize = 14.sp
                         )
@@ -399,27 +430,123 @@ fun AuthScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
-            // Privacy Guarantee
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
+            // Mandatory Login Notice & Firebase Setup
+            Surface(
+                color = Color(0xFF1E293B).copy(alpha = 0.6f),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Icon(
-                    imageVector = Icons.Default.Security,
-                    contentDescription = null,
-                    tint = SpreTealPrimary,
-                    modifier = Modifier.size(14.dp)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = "End-to-End P2P • Direct Bluetooth LE & WebRTC",
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Column(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Security,
+                            contentDescription = null,
+                            tint = SpreTealPrimary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Authentication required for secure encrypted transfers",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    Spacer(Modifier.height(4.dp))
+
+                    TextButton(
+                        onClick = { showFirebaseSetupDialog = true },
+                        contentPadding = PaddingValues(0.dp)
+                    ) {
+                        Icon(Icons.Default.CloudQueue, contentDescription = null, tint = SpreTealPrimary, modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            text = "Firebase Cloud & Database Settings",
+                            fontSize = 11.sp,
+                            color = SpreTealPrimary,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
             }
         }
+    }
+
+    if (showForgotPasswordDialog) {
+        var resetEmail by remember { mutableStateOf(email) }
+        var newPassword by remember { mutableStateOf("") }
+        var resetSuccess by remember { mutableStateOf(false) }
+
+        AlertDialog(
+            onDismissRequest = { showForgotPasswordDialog = false },
+            title = {
+                Text("Reset Password", fontWeight = FontWeight.Bold)
+            },
+            text = {
+                Column {
+                    Text(
+                        text = "Enter your registered email and choose a new password to reset your access.",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = resetEmail,
+                        onValueChange = { resetEmail = it.trim() },
+                        label = { Text("Account Email") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = newPassword,
+                        onValueChange = { newPassword = it },
+                        label = { Text("New Password (min 6 chars)") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    if (resetSuccess) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Password updated! You can now log in.",
+                            color = SpreOnlineGreen,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (resetEmail.isNotBlank() && newPassword.length >= 6) {
+                            viewModel.resetPasswordWithNew(resetEmail, newPassword)
+                            resetSuccess = true
+                            email = resetEmail
+                            password = newPassword
+                        }
+                    },
+                    enabled = resetEmail.isNotBlank() && newPassword.length >= 6,
+                    colors = ButtonDefaults.buttonColors(containerColor = SpreTealPrimary)
+                ) {
+                    Text("Update Password")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showForgotPasswordDialog = false }) {
+                    Text("Close")
+                }
+            }
+        )
     }
 }
 
@@ -446,3 +573,4 @@ private fun TabButton(
         }
     }
 }
+

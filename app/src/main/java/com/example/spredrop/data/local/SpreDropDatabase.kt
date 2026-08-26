@@ -68,6 +68,9 @@ interface UserDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertOrUpdateProfile(profile: UserProfile)
 
+    @Query("DELETE FROM user_profile")
+    suspend fun deleteProfile()
+
     @Query("UPDATE user_profile SET availability = :presence, lastSeen = :time WHERE userId = :userId")
     suspend fun updatePresence(userId: String, presence: UserPresence, time: Long = System.currentTimeMillis())
 
@@ -76,6 +79,22 @@ interface UserDao {
 
     @Query("UPDATE user_profile SET spreDropId = :spreDropId, displayName = :displayName WHERE userId = :userId")
     suspend fun updateIdentity(userId: String, spreDropId: String, displayName: String)
+
+    // User Accounts Authentication
+    @Query("SELECT * FROM user_accounts WHERE LOWER(email) = LOWER(:email) LIMIT 1")
+    suspend fun getAccountByEmail(email: String): UserAccount?
+
+    @Query("SELECT * FROM user_accounts WHERE userId = :userId LIMIT 1")
+    suspend fun getAccountById(userId: String): UserAccount?
+
+    @Query("SELECT * FROM user_accounts ORDER BY createdAt DESC")
+    suspend fun getAllAccounts(): List<UserAccount>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAccount(account: UserAccount)
+
+    @Query("UPDATE user_accounts SET passwordHash = :newHash WHERE LOWER(email) = LOWER(:email)")
+    suspend fun updatePasswordHash(email: String, newHash: String)
 }
 
 @Dao
@@ -166,8 +185,8 @@ interface DevLogDao {
 }
 
 @Database(
-    entities = [UserProfile::class, Friend::class, TransferRecord::class, DevLogEntry::class],
-    version = 1,
+    entities = [UserProfile::class, Friend::class, TransferRecord::class, DevLogEntry::class, UserAccount::class],
+    version = 2,
     exportSchema = false
 )
 @TypeConverters(SpreDropTypeConverters::class)

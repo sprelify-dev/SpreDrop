@@ -100,7 +100,7 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                // Authentication Gate: Require Login / Sign Up first
+                // Authentication Gate: Require Login / Account Registration first (NO access without login)
                 AnimatedContent(
                     targetState = authState is AuthState.Authenticated,
                     transitionSpec = {

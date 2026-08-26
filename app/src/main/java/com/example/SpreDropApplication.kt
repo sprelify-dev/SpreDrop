@@ -16,15 +16,20 @@ class SpreDropApplication : Application() {
 
     private fun initFirebase() {
         try {
+            val prefs = getSharedPreferences("spredrop_auth_prefs", MODE_PRIVATE)
+            val apiKey = prefs.getString("custom_firebase_api_key", "AIzaSyBehu2ei4kWs3L89UJhwGlsq0wvmi-_lkg") ?: "AIzaSyBehu2ei4kWs3L89UJhwGlsq0wvmi-_lkg"
+            val projectId = prefs.getString("custom_firebase_project_id", "spredrop") ?: "spredrop"
+            val appId = prefs.getString("custom_firebase_app_id", "1:947368133167:android:7966e7ee9812d68f8fbcda") ?: "1:947368133167:android:7966e7ee9812d68f8fbcda"
+
             if (FirebaseApp.getApps(this).isEmpty()) {
                 val options = FirebaseOptions.Builder()
-                    .setApplicationId("1:947368133167:android:947368133167spredrop")
-                    .setProjectId("spredrop")
-                    .setApiKey("AIzaSyDummyKeyForLocalFirebaseInit947368133167")
-                    .setStorageBucket("spredrop.firebasestorage.app")
+                    .setApplicationId(appId)
+                    .setProjectId(projectId)
+                    .setApiKey(apiKey)
+                    .setStorageBucket("$projectId.firebasestorage.app")
                     .build()
                 FirebaseApp.initializeApp(this, options)
-                Log.i("SpreDropApp", "Firebase manually initialized with fallback options")
+                Log.i("SpreDropApp", "Firebase initialized for project: $projectId")
             } else {
                 Log.i("SpreDropApp", "Firebase auto-initialized by google-services")
             }
