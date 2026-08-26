@@ -1,0 +1,7 @@
+{
+  "name": "SpreDrop",
+  "description": "Production-oriented Android peer-to-peer file-sharing application with unique SpreDrop IDs, discovery, QR pairing, and chunked direct transfers.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
