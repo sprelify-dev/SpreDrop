@@ -1,9 +1,19 @@
 package com.example.spredrop.ui.screens
 
+import android.Manifest
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.util.Log
+import android.view.ViewGroup
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.camera.core.CameraSelector
+import androidx.camera.core.Preview
+import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.view.PreviewView
 import androidx.compose.animation.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -14,6 +24,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
@@ -29,14 +40,21 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.example.spredrop.model.UserProfile
 import com.example.spredrop.security.QrCodeGenerator
 import com.example.spredrop.ui.SpreDropViewModel
+import com.example.spredrop.ui.components.AnimatedCameraLaserScanner
+import com.example.spredrop.ui.components.SpreDropBrandLogo
 import com.example.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun QrPairScreen(
     viewModel: SpreDropViewModel,
+    onNavigateBack: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -49,6 +67,19 @@ fun QrPairScreen(
         topBar = {
             TopAppBar(
                 title = { Text("QR Pairing & Connect", fontWeight = FontWeight.Bold) },
+                navigationIcon = {
+                    if (onNavigateBack != null) {
+                        IconButton(
+                            onClick = onNavigateBack,
+                            modifier = Modifier.testTag("qr_back_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back to Radar"
+                            )
+                        }
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface
                 )
@@ -108,7 +139,7 @@ fun QrPairScreen(
 
 @Composable
 fun MyQrCodeTab(
-    userProfile: com.example.spredrop.model.UserProfile?,
+    userProfile: UserProfile?,
     onShareQr: (String) -> Unit,
     onCopyId: (String) -> Unit
 ) {
@@ -158,28 +189,13 @@ fun MyQrCodeTab(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.padding(20.dp)
             ) {
-                // Header in card
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                // Header with unified brand logo
+                SpreDropBrandLogo(
+                    sizeDp = 30,
+                    showText = true,
+                    subtitle = "P2P Wireless Identity",
                     modifier = Modifier.padding(bottom = 14.dp)
-                ) {
-                    Box(
-                        contentAlignment = Alignment.Center,
-                        modifier = Modifier
-                            .size(28.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(SpreTealPrimary)
-                    ) {
-                        Text("S", color = Color.White, fontWeight = FontWeight.Black, fontSize = 16.sp)
-                    }
-                    Text(
-                        text = "SpreDrop P2P Identity",
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp
-                    )
-                }
+                )
 
                 // Crisp QR Matrix Bitmap
                 Box(
@@ -255,7 +271,21 @@ fun MyQrCodeTab(
 fun ScanQrCodeTab(
     onCodeScanned: (String) -> Unit
 ) {
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     var manualInput by remember { mutableStateOf("") }
+
+    var hasCameraPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+        )
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        hasCameraPermission = granted
+    }
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -265,96 +295,150 @@ fun ScanQrCodeTab(
             .padding(24.dp)
     ) {
         Text(
-            text = "Camera & Code Scanner",
+            text = "Camera & QR Code Scanner",
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface
         )
         Text(
-            text = "Point camera at a SpreDrop QR code, or type/paste a SpreDrop ID below to pair immediately.",
+            text = "Point your back camera at any SpreDrop QR code, or enter a SpreDrop ID below to pair immediately.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
-            modifier = Modifier.padding(top = 4.dp, bottom = 20.dp)
+            modifier = Modifier.padding(top = 4.dp, bottom = 18.dp)
         )
 
-        // Viewfinder Scanner Mock Box with dynamic scanning laser
+        // Live Back Camera Viewfinder with animated laser scan line
         Box(
             contentAlignment = Alignment.Center,
             modifier = Modifier
-                .size(260.dp)
-                .clip(RoundedCornerShape(20.dp))
-                .background(SpreDarkBg)
-                .border(2.dp, SpreTealPrimary.copy(alpha = 0.6f), RoundedCornerShape(20.dp))
+                .size(280.dp)
+                .clip(RoundedCornerShape(24.dp))
+                .background(Color.Black)
+                .border(2.dp, SpreTealPrimary, RoundedCornerShape(24.dp))
         ) {
-            // Viewfinder crosshair corners
-            Box(
-                modifier = Modifier
-                    .size(180.dp)
-                    .border(2.dp, SpreCyanAccent, RoundedCornerShape(8.dp))
-            )
-            Icon(
-                imageVector = Icons.Default.QrCodeScanner,
-                contentDescription = null,
-                tint = SpreCyanAccent.copy(alpha = 0.7f),
-                modifier = Modifier.size(64.dp)
-            )
+            if (hasCameraPermission) {
+                AndroidView(
+                    factory = { ctx ->
+                        val previewView = PreviewView(ctx).apply {
+                            layoutParams = ViewGroup.LayoutParams(
+                                ViewGroup.LayoutParams.MATCH_PARENT,
+                                ViewGroup.LayoutParams.MATCH_PARENT
+                            )
+                            scaleType = PreviewView.ScaleType.FILL_CENTER
+                        }
 
-            Text(
-                text = "Scanning for SpreDrop QR...",
-                color = SpreDarkTextMuted,
-                fontSize = 11.sp,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 12.dp)
-            )
+                        val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
+                        cameraProviderFuture.addListener({
+                            try {
+                                val cameraProvider = cameraProviderFuture.get()
+                                val preview = Preview.Builder().build().also {
+                                    it.surfaceProvider = previewView.surfaceProvider
+                                }
+                                val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+
+                                cameraProvider.unbindAll()
+                                cameraProvider.bindToLifecycle(
+                                    lifecycleOwner,
+                                    cameraSelector,
+                                    preview
+                                )
+                            } catch (exc: Exception) {
+                                Log.e("QrScanner", "Use case binding failed", exc)
+                            }
+                        }, ContextCompat.getMainExecutor(ctx))
+
+                        previewView
+                    },
+                    modifier = Modifier.fillMaxSize()
+                )
+
+                // Viewfinder guide corners
+                Box(
+                    modifier = Modifier
+                        .size(200.dp)
+                        .border(2.5.dp, SpreCyanAccent, RoundedCornerShape(12.dp))
+                )
+
+                // High-tech laser sweep animation
+                AnimatedCameraLaserScanner(modifier = Modifier.size(200.dp))
+
+                Surface(
+                    color = Color.Black.copy(alpha = 0.65f),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 12.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                    ) {
+                        Box(modifier = Modifier.size(8.dp).background(SpreOnlineGreen, CircleShape))
+                        Text(
+                            text = "Back Camera Active",
+                            color = Color.White,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            } else {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                    modifier = Modifier.padding(18.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.CameraAlt,
+                        contentDescription = null,
+                        tint = SpreTealPrimary,
+                        modifier = Modifier.size(48.dp)
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = "Camera Permission Required",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Enable camera access to scan QR codes instantly.",
+                        color = SpreDarkTextMuted,
+                        fontSize = 11.sp,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(14.dp))
+                    Button(
+                        onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) },
+                        colors = ButtonDefaults.buttonColors(containerColor = SpreTealPrimary),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.testTag("grant_camera_permission_button")
+                    ) {
+                        Text("Open Camera", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
         }
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // Quick demo QR test triggers
+        // Manual SpreDrop ID or Payload Input
         Text(
-            text = "Quick Connect Presets",
+            text = "Or Connect via SpreDrop ID",
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.align(Alignment.Start)
         )
         Spacer(modifier = Modifier.height(8.dp))
 
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            OutlinedButton(
-                onClick = { onCodeScanned("@priya") },
-                shape = RoundedCornerShape(10.dp),
-                modifier = Modifier.weight(1f)
-            ) {
-                Text("@priya", fontSize = 12.sp)
-            }
-            OutlinedButton(
-                onClick = { onCodeScanned("@alex") },
-                shape = RoundedCornerShape(10.dp),
-                modifier = Modifier.weight(1f)
-            ) {
-                Text("@alex", fontSize = 12.sp)
-            }
-            OutlinedButton(
-                onClick = { onCodeScanned("@elena") },
-                shape = RoundedCornerShape(10.dp),
-                modifier = Modifier.weight(1f)
-            ) {
-                Text("@elena", fontSize = 12.sp)
-            }
-        }
-
-        Spacer(modifier = Modifier.height(20.dp))
-
-        // Manual ID or Payload Input
         OutlinedTextField(
             value = manualInput,
             onValueChange = { manualInput = it },
-            label = { Text("Paste SpreDrop URL or @ID") },
+            label = { Text("Enter SpreDrop @ID or QR text") },
             placeholder = { Text("e.g. @rahul or spredrop://pair?...") },
             shape = RoundedCornerShape(12.dp),
             modifier = Modifier.fillMaxWidth()
@@ -369,15 +453,15 @@ fun ScanQrCodeTab(
                     manualInput = ""
                 }
             },
-            colors = ButtonDefaults.buttonColors(containerColor = SpreCyanAccent, contentColor = Color.Black),
+            colors = ButtonDefaults.buttonColors(containerColor = SpreTealPrimary, contentColor = Color.White),
             enabled = manualInput.isNotBlank(),
             shape = RoundedCornerShape(12.dp),
             modifier = Modifier
                 .fillMaxWidth()
                 .testTag("pair_scanned_button")
         ) {
-            Icon(Icons.Default.Link, contentDescription = null, modifier = Modifier.size(16.dp))
-            Spacer(modifier = Modifier.width(6.dp))
+            Icon(Icons.Default.Link, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.width(8.dp))
             Text("Pair Device Now", fontWeight = FontWeight.Bold)
         }
     }

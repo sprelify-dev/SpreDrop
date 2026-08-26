@@ -209,10 +209,10 @@ fun SpreDropApp(
                             if (currentRoute != screen.route) {
                                 navController.navigate(screen.route) {
                                     popUpTo(navController.graph.findStartDestination().id) {
-                                        saveState = true
+                                        saveState = false
                                     }
                                     launchSingleTop = true
-                                    restoreState = true
+                                    restoreState = false
                                 }
                             }
                         },
@@ -251,7 +251,8 @@ fun SpreDropApp(
             }
             composable(Screen.QrPair.route) {
                 QrPairScreen(
-                    viewModel = viewModel
+                    viewModel = viewModel,
+                    onNavigateBack = { navController.navigate(Screen.Home.route) }
                 )
             }
             composable(Screen.Profile.route) {

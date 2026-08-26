@@ -2,6 +2,7 @@ package com.example.spredrop.ui.components
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -16,8 +17,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -26,6 +32,69 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.spredrop.model.*
 import com.example.ui.theme.*
+import kotlin.math.cos
+import kotlin.math.sin
+
+/**
+ * Unified SpreDrop Brand Logo used consistently throughout the application
+ */
+@Composable
+fun SpreDropBrandLogo(
+    sizeDp: Int = 40,
+    showText: Boolean = false,
+    subtitle: String? = null,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        modifier = modifier
+    ) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .size(sizeDp.dp)
+                .clip(RoundedCornerShape((sizeDp * 0.28).dp))
+                .background(
+                    Brush.linearGradient(
+                        colors = listOf(
+                            Color(0xFF00E5FF), // Electric Cyan
+                            Color(0xFF00B4D8), // Spre Teal Primary
+                            Color(0xFF0077B6)  // Deep Oceanic Blue
+                        )
+                    )
+                )
+                .border(1.5.dp, Color.White.copy(alpha = 0.35f), RoundedCornerShape((sizeDp * 0.28).dp))
+        ) {
+            Icon(
+                imageVector = Icons.Default.Bolt,
+                contentDescription = "SpreDrop Logo",
+                tint = Color.White,
+                modifier = Modifier.size((sizeDp * 0.62).dp)
+            )
+        }
+
+        if (showText) {
+            Column {
+                Text(
+                    text = "SpreDrop",
+                    style = if (sizeDp > 48) MaterialTheme.typography.headlineMedium else MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Black,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    letterSpacing = (-0.5).sp
+                )
+                if (subtitle != null) {
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = SpreTealPrimary,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+        }
+    }
+}
 
 @Composable
 fun PresenceStatusPill(
@@ -35,16 +104,16 @@ fun PresenceStatusPill(
 ) {
     val statusColor = when (presence) {
         UserPresence.ONLINE, UserPresence.AVAILABLE -> SpreOnlineGreen
-        UserPresence.AWAY -> SpreAwayYellow
+        UserPresence.FRIENDS_ONLY -> SpreCyanAccent
         UserPresence.TRANSFERRING -> SpreTransferBlue
-        UserPresence.CONNECTING -> SpreAwayYellow
+        UserPresence.CONNECTING -> SpreCyanAccent
         UserPresence.INVISIBLE, UserPresence.OFFLINE -> SpreOfflineGray
     }
 
     Surface(
         color = statusColor.copy(alpha = 0.15f),
         shape = RoundedCornerShape(16.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, statusColor.copy(alpha = 0.4f)),
+        border = androidx.compose.foundation.BorderStroke(1.dp, statusColor.copy(alpha = 0.45f)),
         modifier = modifier
             .clip(RoundedCornerShape(16.dp))
             .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier)
@@ -52,7 +121,7 @@ fun PresenceStatusPill(
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
         ) {
             Box(
                 modifier = Modifier
@@ -63,7 +132,7 @@ fun PresenceStatusPill(
                 text = presence.label,
                 color = statusColor,
                 fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold
+                fontWeight = FontWeight.Bold
             )
             if (onClick != null) {
                 Icon(
@@ -122,9 +191,9 @@ fun UserAvatar(
         if (presence != null) {
             val statusColor = when (presence) {
                 UserPresence.ONLINE, UserPresence.AVAILABLE -> SpreOnlineGreen
-                UserPresence.AWAY -> SpreAwayYellow
+                UserPresence.FRIENDS_ONLY -> SpreCyanAccent
                 UserPresence.TRANSFERRING -> SpreTransferBlue
-                UserPresence.CONNECTING -> SpreAwayYellow
+                UserPresence.CONNECTING -> SpreCyanAccent
                 UserPresence.INVISIBLE, UserPresence.OFFLINE -> SpreOfflineGray
             }
             Box(
@@ -138,38 +207,253 @@ fun UserAvatar(
     }
 }
 
+/**
+ * Animated High-Tech Sweeping Radar Animation for peer discovery
+ */
 @Composable
-fun RadarPulseEffect(
+fun AnimatedRadarScanner(
     isScanning: Boolean = true,
     modifier: Modifier = Modifier
 ) {
-    val infiniteTransition = rememberInfiniteTransition(label = "radar")
-    val scale by infiniteTransition.animateFloat(
-        initialValue = 0.8f,
-        targetValue = 1.6f,
+    val infiniteTransition = rememberInfiniteTransition(label = "radar_scanner")
+    val sweepAngle by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
         animationSpec = infiniteRepeatable(
-            animation = tween(2200, easing = LinearEasing),
+            animation = tween(2800, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ),
-        label = "radar_scale"
-    )
-    val alpha by infiniteTransition.animateFloat(
-        initialValue = 0.6f,
-        targetValue = 0.0f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2200, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "radar_alpha"
+        label = "sweep_angle"
     )
 
-    if (isScanning) {
-        Box(
-            modifier = modifier
-                .fillMaxSize()
-                .clip(CircleShape)
-                .background(SpreTealPrimary.copy(alpha = alpha))
+    val wave1 by infiniteTransition.animateFloat(
+        initialValue = 0.2f,
+        targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2400, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "wave_1"
+    )
+
+    val wave2 by infiniteTransition.animateFloat(
+        initialValue = 0.2f,
+        targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2400, delayMillis = 1200, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "wave_2"
+    )
+
+    Canvas(modifier = modifier.fillMaxSize()) {
+        val centerX = size.width / 2f
+        val centerY = size.height / 2f
+        val maxRadius = minOf(centerX, centerY)
+
+        // Concentric guide rings
+        drawCircle(
+            color = Color(0xFF00B4D8).copy(alpha = 0.12f),
+            radius = maxRadius * 0.33f,
+            center = Offset(centerX, centerY),
+            style = Stroke(width = 1.5.dp.toPx())
         )
+        drawCircle(
+            color = Color(0xFF00B4D8).copy(alpha = 0.15f),
+            radius = maxRadius * 0.66f,
+            center = Offset(centerX, centerY),
+            style = Stroke(width = 1.5.dp.toPx())
+        )
+        drawCircle(
+            color = Color(0xFF00B4D8).copy(alpha = 0.2f),
+            radius = maxRadius * 0.95f,
+            center = Offset(centerX, centerY),
+            style = Stroke(width = 2.dp.toPx())
+        )
+
+        // Crosshairs
+        drawLine(
+            color = Color(0xFF00B4D8).copy(alpha = 0.18f),
+            start = Offset(centerX - maxRadius, centerY),
+            end = Offset(centerX + maxRadius, centerY),
+            strokeWidth = 1.dp.toPx()
+        )
+        drawLine(
+            color = Color(0xFF00B4D8).copy(alpha = 0.18f),
+            start = Offset(centerX, centerY - maxRadius),
+            end = Offset(centerX, centerY + maxRadius),
+            strokeWidth = 1.dp.toPx()
+        )
+
+        if (isScanning) {
+            // Ripple wave 1
+            drawCircle(
+                color = Color(0xFF00E5FF).copy(alpha = (1f - wave1) * 0.4f),
+                radius = maxRadius * wave1,
+                center = Offset(centerX, centerY),
+                style = Stroke(width = 2.dp.toPx())
+            )
+
+            // Ripple wave 2
+            drawCircle(
+                color = Color(0xFF00E5FF).copy(alpha = (1f - wave2) * 0.4f),
+                radius = maxRadius * wave2,
+                center = Offset(centerX, centerY),
+                style = Stroke(width = 2.dp.toPx())
+            )
+
+            // Rotating sweep beam
+            val radians = Math.toRadians(sweepAngle.toDouble())
+            val beamEndX = centerX + (maxRadius * 0.95f * cos(radians)).toFloat()
+            val beamEndY = centerY + (maxRadius * 0.95f * sin(radians)).toFloat()
+
+            drawLine(
+                brush = Brush.linearGradient(
+                    colors = listOf(Color(0xFF00E5FF), Color(0xFF00B4D8).copy(alpha = 0f)),
+                    start = Offset(centerX, centerY),
+                    end = Offset(beamEndX, beamEndY)
+                ),
+                start = Offset(centerX, centerY),
+                end = Offset(beamEndX, beamEndY),
+                strokeWidth = 3.dp.toPx(),
+                cap = StrokeCap.Round
+            )
+        }
+    }
+}
+
+/**
+ * Animated Laser Line Scanner for QR Camera Viewfinder
+ */
+@Composable
+fun AnimatedCameraLaserScanner(
+    modifier: Modifier = Modifier
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "laser_scanner")
+    val laserPosition by infiniteTransition.animateFloat(
+        initialValue = 0.05f,
+        targetValue = 0.95f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1600, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "laser_y"
+    )
+
+    Canvas(modifier = modifier.fillMaxSize()) {
+        val y = size.height * laserPosition
+        // Laser glow
+        drawLine(
+            brush = Brush.horizontalGradient(
+                colors = listOf(
+                    Color.Transparent,
+                    Color(0xFF00E5FF).copy(alpha = 0.35f),
+                    Color(0xFF00E5FF),
+                    Color(0xFF00E5FF).copy(alpha = 0.35f),
+                    Color.Transparent
+                )
+            ),
+            start = Offset(0f, y),
+            end = Offset(size.width, y),
+            strokeWidth = 4.dp.toPx(),
+            cap = StrokeCap.Round
+        )
+
+        // Intense central core
+        drawLine(
+            brush = Brush.horizontalGradient(
+                colors = listOf(
+                    Color.Transparent,
+                    Color.White.copy(alpha = 0.8f),
+                    Color.White,
+                    Color.White.copy(alpha = 0.8f),
+                    Color.Transparent
+                )
+            ),
+            start = Offset(size.width * 0.15f, y),
+            end = Offset(size.width * 0.85f, y),
+            strokeWidth = 1.5.dp.toPx(),
+            cap = StrokeCap.Round
+        )
+    }
+}
+
+/**
+ * Animated Particle Flow for Active File Transfer
+ */
+@Composable
+fun AnimatedTransferFlow(
+    progressPercent: Float,
+    speedString: String,
+    modifier: Modifier = Modifier
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "transfer_flow")
+    val flowOffset by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1200, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "flow_offset"
+    )
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Canvas(modifier = Modifier.fillMaxWidth().height(36.dp)) {
+            val width = size.width
+            val height = size.height
+            val cy = height / 2f
+
+            // Baseline track
+            drawLine(
+                color = Color(0xFF00B4D8).copy(alpha = 0.2f),
+                start = Offset(16.dp.toPx(), cy),
+                end = Offset(width - 16.dp.toPx(), cy),
+                strokeWidth = 3.dp.toPx(),
+                cap = StrokeCap.Round
+            )
+
+            // Flowing packets/pulses
+            val packetCount = 5
+            for (i in 0 until packetCount) {
+                val baseFrac = (i.toFloat() / packetCount + flowOffset) % 1.0f
+                val x = 16.dp.toPx() + (width - 32.dp.toPx()) * baseFrac
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(Color(0xFF00E5FF), Color(0xFF0077B6).copy(alpha = 0f))
+                    ),
+                    radius = 8.dp.toPx(),
+                    center = Offset(x, cy)
+                )
+                drawCircle(
+                    color = Color.White,
+                    radius = 3.dp.toPx(),
+                    center = Offset(x, cy)
+                )
+            }
+        }
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+        ) {
+            Text(
+                text = "${(progressPercent * 100).toInt()}% Transferred",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = SpreTealPrimary
+            )
+            Text(
+                text = speedString,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = SpreOnlineGreen
+            )
+        }
     }
 }
 
@@ -193,52 +477,12 @@ fun SpreDropTopBar(
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 10.dp)
         ) {
-            // Brand Logo & Title
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(
-                            Brush.linearGradient(
-                                listOf(SpreTealPrimary, SpreTealDark)
-                            )
-                        )
-                ) {
-                    Text(
-                        text = "S",
-                        color = Color.White,
-                        fontWeight = FontWeight.Black,
-                        fontSize = 20.sp
-                    )
-                }
-
-                Column {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(
-                            text = "SpreDrop",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Box(
-                            modifier = Modifier
-                                .size(6.dp)
-                                .background(if (isOnline) SpreOnlineGreen else SpreOfflineGray, CircleShape)
-                        )
-                    }
-                    Text(
-                        text = userProfile?.spreDropId ?: "@spredrop",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = SpreTealPrimary,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
-            }
+            // Unified SpreDrop Brand Logo
+            SpreDropBrandLogo(
+                sizeDp = 38,
+                showText = true,
+                subtitle = userProfile?.spreDropId ?: "@spredrop"
+            )
 
             // Right Action Controls
             Row(

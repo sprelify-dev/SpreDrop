@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.spredrop.data.firebase.AuthState
 import com.example.spredrop.ui.SpreDropViewModel
+import com.example.spredrop.ui.components.SpreDropBrandLogo
 import com.example.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -91,35 +92,14 @@ fun AuthScreen(
         ) {
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Logo & Header
-            Box(
-                modifier = Modifier
-                    .size(76.dp)
-                    .clip(CircleShape)
-                    .background(
-                        Brush.radialGradient(
-                            colors = listOf(SpreTealPrimary, SpreTealDark)
-                        )
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Lock,
-                    contentDescription = "SpreDrop Secure Access",
-                    tint = Color.White,
-                    modifier = Modifier.size(38.dp)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Text(
-                text = "SpreDrop Account",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                color = Color.White,
-                letterSpacing = 1.sp
+            // Unified SpreDrop Brand Logo & Header
+            SpreDropBrandLogo(
+                sizeDp = 64,
+                showText = true,
+                subtitle = "Wireless P2P File Transfer"
             )
+
+            Spacer(modifier = Modifier.height(14.dp))
 
             Text(
                 text = "Sign in or create an account to access SpreDrop P2P transfer network",

@@ -76,6 +76,13 @@ class FirebaseAuthManager(private val context: Context) {
         restoreSession()
     }
 
+    fun updateActiveSession(displayName: String, spreDropId: String) {
+        val current = currentUser ?: return
+        val updated = current.copy(displayName = displayName)
+        saveSession(current.uid, current.email, displayName)
+        _authState.value = AuthState.Authenticated(updated)
+    }
+
     private fun isFirebaseConfigured(): Boolean {
         return try {
             val key = auth?.app?.options?.apiKey

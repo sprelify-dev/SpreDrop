@@ -80,6 +80,9 @@ interface UserDao {
     @Query("UPDATE user_profile SET spreDropId = :spreDropId, displayName = :displayName WHERE userId = :userId")
     suspend fun updateIdentity(userId: String, spreDropId: String, displayName: String)
 
+    @Query("UPDATE user_accounts SET spreDropId = :spreDropId, displayName = :displayName WHERE userId = :userId")
+    suspend fun updateAccountIdentity(userId: String, spreDropId: String, displayName: String)
+
     // User Accounts Authentication
     @Query("SELECT * FROM user_accounts WHERE LOWER(email) = LOWER(:email) LIMIT 1")
     suspend fun getAccountByEmail(email: String): UserAccount?

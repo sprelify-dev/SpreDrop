@@ -89,13 +89,20 @@ class SpreDropRepository(private val context: Context) {
             if (state is AuthState.Authenticated) {
                 val user = state.user
                 val current = userDao.getUserProfileOnce()
-                val realDisplayName = if (!user.displayName.isNullOrBlank()) user.displayName else current?.displayName ?: "SpreDrop User"
-                val realHandle = if (!user.email.isNullOrBlank()) {
-                    "@" + user.email.substringBefore("@").replace(".", "_")
-                } else if (current != null && current.spreDropId.isNotBlank()) {
-                    current.spreDropId
-                } else {
-                    "@" + user.uid.take(6)
+                val savedAccount = userDao.getAccountById(user.uid)
+
+                val realDisplayName = when {
+                    !current?.displayName.isNullOrBlank() -> current!!.displayName
+                    !savedAccount?.displayName.isNullOrBlank() -> savedAccount!!.displayName
+                    !user.displayName.isNullOrBlank() -> user.displayName
+                    else -> "SpreDrop User"
+                }
+
+                val realHandle = when {
+                    !current?.spreDropId.isNullOrBlank() -> current!!.spreDropId
+                    !savedAccount?.spreDropId.isNullOrBlank() -> savedAccount!!.spreDropId
+                    !user.email.isNullOrBlank() -> "@" + user.email.substringBefore("@").replace(".", "_")
+                    else -> "@" + user.uid.take(6)
                 }
 
                 val updated = UserProfile(
@@ -148,8 +155,18 @@ class SpreDropRepository(private val context: Context) {
         val profile = userDao.getUserProfileOnce() ?: return
         val cleanId = if (spreDropId.startsWith("@")) spreDropId else "@$spreDropId"
         userDao.updateIdentity(profile.userId, cleanId, displayName)
+        userDao.updateAccountIdentity(profile.userId, cleanId, displayName)
+        authManager.updateActiveSession(displayName, cleanId)
         val updated = profile.copy(spreDropId = cleanId, displayName = displayName)
         databaseManager.uploadUserProfile(updated)
+        databaseManager.publishPeerPresence(
+            userId = updated.userId,
+            spreDropId = updated.spreDropId,
+            displayName = updated.displayName,
+            avatarColorHex = updated.avatarColorHex,
+            availability = updated.availability,
+            isOnline = true
+        )
     }
 
     suspend fun syncWithFirestoreNow(): Result<Unit> {

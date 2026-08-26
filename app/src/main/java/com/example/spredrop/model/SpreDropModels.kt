@@ -7,22 +7,22 @@ import androidx.room.PrimaryKey
  * Presence states defined in the SpreDrop specification
  */
 enum class UserPresence(val label: String, val emoji: String) {
+    AVAILABLE("Available (Everyone)", "🟢"),
+    FRIENDS_ONLY("Friends Only", "👥"),
+    INVISIBLE("Invisible (Hidden)", "👻"),
     ONLINE("Online", "🟢"),
-    AVAILABLE("Available", "🟢"),
-    AWAY("Away", "🟡"),
     OFFLINE("Offline", "⚫"),
-    INVISIBLE("Invisible", "⚪"),
-    CONNECTING("Connecting", "🔄"),
-    TRANSFERRING("Transferring", "⚡")
+    TRANSFERRING("Transferring", "⚡"),
+    CONNECTING("Connecting", "🔄")
 }
 
 /**
  * Privacy modes defined in the SpreDrop specification
  */
 enum class PrivacyMode(val label: String, val description: String) {
-    VISIBLE("Visible", "Discoverable by nearby users and friends"),
-    INVISIBLE("Invisible", "Hidden from public discovery, friends can still send transfers"),
+    VISIBLE("Visible to Everyone", "Discoverable by all nearby SpreDrop users"),
     FRIENDS_ONLY("Friends Only", "Only confirmed friends can discover and send files"),
+    INVISIBLE("Invisible", "Hidden from public discovery; completely private"),
     BLOCKED("Blocked", "Restricted access")
 }
 

@@ -495,6 +495,14 @@ fun ActiveTransferCard(
                     }
                 }
             } else {
+                if (transfer.status == TransferStatus.TRANSFERRING) {
+                    AnimatedTransferFlow(
+                        progressPercent = transfer.progress,
+                        speedString = transfer.formattedSpeed,
+                        modifier = Modifier.padding(vertical = 4.dp)
+                    )
+                }
+
                 // Live Progress bar and transfer stats
                 LinearProgressIndicator(
                     progress = { transfer.progress },
@@ -644,8 +652,9 @@ fun DiscoveredPeerCard(
 @Composable
 fun EmptyDiscoveryCard(onScanQr: () -> Unit, modifier: Modifier = Modifier) {
     Surface(
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
-        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(20.dp),
+        tonalElevation = 1.dp,
         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.surfaceVariant),
         modifier = modifier.fillMaxWidth()
     ) {
@@ -653,34 +662,38 @@ fun EmptyDiscoveryCard(onScanQr: () -> Unit, modifier: Modifier = Modifier) {
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.padding(24.dp)
         ) {
-            Icon(
-                imageVector = Icons.Outlined.Radar,
-                contentDescription = null,
-                tint = SpreTealPrimary,
-                modifier = Modifier.size(44.dp)
-            )
-            Spacer(modifier = Modifier.height(10.dp))
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .size(160.dp)
+                    .padding(8.dp)
+            ) {
+                AnimatedRadarScanner(isScanning = true)
+                SpreDropBrandLogo(sizeDp = 36)
+            }
+            Spacer(modifier = Modifier.height(14.dp))
             Text(
-                text = "Looking for nearby SpreDrop devices...",
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold,
+                text = "Scanning for Nearby SpreDrop Devices...",
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "Devices on your Wi-Fi or with Bluetooth active will appear here automatically.",
+                text = "Devices on Wi-Fi, Bluetooth Low Energy, or online will appear automatically.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center
             )
-            Spacer(modifier = Modifier.height(12.dp))
-            OutlinedButton(
+            Spacer(modifier = Modifier.height(16.dp))
+            Button(
                 onClick = onScanQr,
-                shape = RoundedCornerShape(10.dp)
+                colors = ButtonDefaults.buttonColors(containerColor = SpreTealPrimary),
+                shape = RoundedCornerShape(12.dp)
             ) {
-                Icon(Icons.Default.QrCodeScanner, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text("Pair with QR Code instead", fontSize = 12.sp)
+                Icon(Icons.Default.QrCodeScanner, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Open Camera QR Scanner", fontSize = 13.sp, fontWeight = FontWeight.Bold)
             }
         }
     }
@@ -720,18 +733,19 @@ fun PresenceSelectionDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Set Presence & Availability", fontWeight = FontWeight.Bold) },
+        title = { Text("Set Discovery & Presence", fontWeight = FontWeight.Bold) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 listOf(
-                    UserPresence.AVAILABLE to "Available for transfers",
-                    UserPresence.AWAY to "Away from device",
-                    UserPresence.INVISIBLE to "Invisible (Do not show in nearby discovery)",
-                    UserPresence.OFFLINE to "Offline"
-                ).forEach { (presence, desc) ->
+                    Triple(UserPresence.AVAILABLE, "Available", "Visible to everyone nearby and all friends 🟢"),
+                    Triple(UserPresence.FRIENDS_ONLY, "Friends Only", "Only confirmed friends can discover you and send files 👥"),
+                    Triple(UserPresence.INVISIBLE, "Invisible", "Stealth mode: Completely hidden from nearby radar 👻")
+                ).forEach { (presence, title, desc) ->
+                    val isSelected = currentPresence == presence
                     Surface(
-                        color = if (presence == currentPresence) SpreTealPrimary.copy(alpha = 0.15f) else Color.Transparent,
-                        shape = RoundedCornerShape(12.dp),
+                        color = if (isSelected) SpreTealPrimary.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                        shape = RoundedCornerShape(14.dp),
+                        border = if (isSelected) androidx.compose.foundation.BorderStroke(1.5.dp, SpreTealPrimary) else null,
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { onSelectPresence(presence) }
@@ -739,14 +753,15 @@ fun PresenceSelectionDialog(
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            modifier = Modifier.padding(12.dp)
+                            modifier = Modifier.padding(14.dp)
                         ) {
-                            Text(text = presence.emoji, fontSize = 20.sp)
+                            Text(text = presence.emoji, fontSize = 24.sp)
                             Column {
                                 Text(
-                                    text = presence.label,
+                                    text = title,
                                     fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    fontSize = 15.sp
                                 )
                                 Text(
                                     text = desc,
@@ -761,7 +776,7 @@ fun PresenceSelectionDialog(
         },
         confirmButton = {
             TextButton(onClick = onDismiss) {
-                Text("Close")
+                Text("Done", fontWeight = FontWeight.Bold)
             }
         }
     )

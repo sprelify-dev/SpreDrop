@@ -366,7 +366,7 @@ fun EmptyFriendsCard(onAddFriend: () -> Unit) {
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "Add friends using their unique SpreDrop ID (e.g. @priya) or pair via QR code.",
+                text = "Add friends using their unique SpreDrop @ID or by scanning their QR code.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -405,7 +405,7 @@ fun AddFriendDialog(
                 OutlinedTextField(
                     value = spreDropId,
                     onValueChange = { spreDropId = it },
-                    label = { Text("SpreDrop ID (e.g. @priya)") },
+                    label = { Text("SpreDrop ID (e.g. @username)") },
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth()
                 )

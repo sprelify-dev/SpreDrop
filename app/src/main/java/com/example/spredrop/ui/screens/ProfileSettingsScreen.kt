@@ -126,20 +126,20 @@ fun ProfileSettingsScreen(
                                 horizontalArrangement = Arrangement.spacedBy(14.dp)
                             ) {
                                 UserAvatar(
-                                    name = userProfile?.displayName ?: "Rahul",
-                                    spreDropId = userProfile?.spreDropId ?: "@rahul",
+                                    name = userProfile?.displayName ?: "User",
+                                    spreDropId = userProfile?.spreDropId ?: "@user",
                                     presence = userProfile?.availability,
                                     sizeDp = 58
                                 )
 
                                 Column {
                                     Text(
-                                        text = userProfile?.displayName ?: "Rahul Sharma",
+                                        text = userProfile?.displayName ?: "SpreDrop User",
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.Bold
                                     )
                                     Text(
-                                        text = userProfile?.spreDropId ?: "@rahul",
+                                        text = userProfile?.spreDropId ?: "@user",
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = SpreTealPrimary,
                                         fontWeight = FontWeight.SemiBold

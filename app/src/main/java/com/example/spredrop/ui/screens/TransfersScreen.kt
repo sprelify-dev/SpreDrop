@@ -23,6 +23,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.spredrop.model.*
 import com.example.spredrop.ui.SpreDropViewModel
+import com.example.spredrop.ui.components.AnimatedTransferFlow
+import com.example.spredrop.ui.components.SpreDropBrandLogo
 import com.example.ui.theme.*
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -250,6 +252,14 @@ fun ActiveTransferDetailCard(
                     }
                 }
             } else {
+                if (transfer.status == TransferStatus.TRANSFERRING) {
+                    AnimatedTransferFlow(
+                        progressPercent = transfer.progress,
+                        speedString = transfer.formattedSpeed,
+                        modifier = Modifier.padding(vertical = 4.dp)
+                    )
+                }
+
                 LinearProgressIndicator(
                     progress = { transfer.progress },
                     color = SpreTealPrimary,
