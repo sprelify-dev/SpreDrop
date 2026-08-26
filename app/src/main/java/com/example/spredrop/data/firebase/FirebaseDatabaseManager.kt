@@ -35,15 +35,18 @@ data class CloudFriendRequest(
 
 class FirebaseDatabaseManager {
 
-    private val firestore: FirebaseFirestore by lazy {
-        val instance = FirebaseFirestore.getInstance()
+    private val firestore: FirebaseFirestore? by lazy {
         try {
+            val instance = FirebaseFirestore.getInstance()
             val settings = FirebaseFirestoreSettings.Builder()
                 .setPersistenceEnabled(true)
                 .build()
             instance.firestoreSettings = settings
-        } catch (_: Exception) {}
-        instance
+            instance
+        } catch (e: Exception) {
+            Log.w("FirebaseDatabaseManager", "Firestore init warning: ${e.message}")
+            null
+        }
     }
 
     private val _connectionState = MutableStateFlow<FirestoreConnectionState>(
@@ -59,6 +62,7 @@ class FirebaseDatabaseManager {
     // -------------------------------------------------------------
 
     suspend fun uploadUserProfile(profile: UserProfile): Result<Unit> {
+        val fs = firestore ?: return Result.failure(IllegalStateException("Firestore not initialized"))
         return try {
             val userDoc = mapOf(
                 "userId" to profile.userId,
@@ -73,7 +77,7 @@ class FirebaseDatabaseManager {
                 "projectId" to "spredrop"
             )
 
-            firestore.collection("users")
+            fs.collection("users")
                 .document(profile.userId)
                 .set(userDoc, SetOptions.merge())
                 .await()
@@ -87,9 +91,15 @@ class FirebaseDatabaseManager {
     }
 
     fun observeUserProfile(userId: String): Flow<UserProfile?> = callbackFlow {
+        val fs = firestore
+        if (fs == null) {
+            trySend(null)
+            awaitClose { }
+            return@callbackFlow
+        }
         var registration: ListenerRegistration? = null
         try {
-            registration = firestore.collection("users")
+            registration = fs.collection("users")
                 .document(userId)
                 .addSnapshotListener { snapshot, error ->
                     if (error != null) {
@@ -141,8 +151,9 @@ class FirebaseDatabaseManager {
         availability: UserPresence,
         isOnline: Boolean
     ): Result<Unit> {
+        val fs = firestore ?: return Result.failure(IllegalStateException("Firestore not initialized"))
         return try {
-            val peerRef = firestore.collection("online_peers").document(userId)
+            val peerRef = fs.collection("online_peers").document(userId)
             if (isOnline) {
                 val peerData = mapOf(
                     "deviceId" to userId,
@@ -165,9 +176,15 @@ class FirebaseDatabaseManager {
     }
 
     fun observeOnlineCloudPeers(currentUserId: String): Flow<List<PeerDevice>> = callbackFlow {
+        val fs = firestore
+        if (fs == null) {
+            trySend(emptyList())
+            awaitClose { }
+            return@callbackFlow
+        }
         var registration: ListenerRegistration? = null
         try {
-            registration = firestore.collection("online_peers")
+            registration = fs.collection("online_peers")
                 .whereEqualTo("isOnline", true)
                 .addSnapshotListener { snapshots, error ->
                     if (error != null) {
@@ -223,6 +240,7 @@ class FirebaseDatabaseManager {
     // -------------------------------------------------------------
 
     suspend fun logTransferToCloud(transfer: TransferRecord): Result<Unit> {
+        val fs = firestore ?: return Result.failure(IllegalStateException("Firestore not initialized"))
         return try {
             val transferDoc = mapOf(
                 "transferId" to transfer.transferId,
@@ -243,7 +261,7 @@ class FirebaseDatabaseManager {
                 "projectId" to "spredrop"
             )
 
-            firestore.collection("transfers")
+            fs.collection("transfers")
                 .document(transfer.transferId)
                 .set(transferDoc, SetOptions.merge())
                 .await()
@@ -264,6 +282,7 @@ class FirebaseDatabaseManager {
         fromProfile: UserProfile,
         targetSpreDropId: String
     ): Result<Unit> {
+        val fs = firestore ?: return Result.failure(IllegalStateException("Firestore not initialized"))
         return try {
             val requestId = "req_${fromProfile.userId}_${targetSpreDropId.replace("@", "")}"
             val requestDoc = mapOf(
@@ -278,7 +297,7 @@ class FirebaseDatabaseManager {
                 "projectId" to "spredrop"
             )
 
-            firestore.collection("friend_requests")
+            fs.collection("friend_requests")
                 .document(requestId)
                 .set(requestDoc, SetOptions.merge())
                 .await()
@@ -291,9 +310,15 @@ class FirebaseDatabaseManager {
     }
 
     fun observeIncomingCloudFriendRequests(mySpreDropId: String): Flow<List<CloudFriendRequest>> = callbackFlow {
+        val fs = firestore
+        if (fs == null) {
+            trySend(emptyList())
+            awaitClose { }
+            return@callbackFlow
+        }
         var registration: ListenerRegistration? = null
         try {
-            registration = firestore.collection("friend_requests")
+            registration = fs.collection("friend_requests")
                 .whereEqualTo("toSpreDropId", mySpreDropId)
                 .whereEqualTo("status", "PENDING")
                 .addSnapshotListener { snapshots, error ->
@@ -337,8 +362,9 @@ class FirebaseDatabaseManager {
     }
 
     suspend fun updateCloudFriendRequestStatus(requestId: String, status: String): Result<Unit> {
+        val fs = firestore ?: return Result.failure(IllegalStateException("Firestore not initialized"))
         return try {
-            firestore.collection("friend_requests")
+            fs.collection("friend_requests")
                 .document(requestId)
                 .update("status", status)
                 .await()
@@ -353,6 +379,7 @@ class FirebaseDatabaseManager {
     // -------------------------------------------------------------
 
     suspend fun sendTransferProposal(transfer: TransferRecord): Result<Unit> {
+        val fs = firestore ?: return Result.failure(IllegalStateException("Firestore not initialized"))
         return try {
             val proposalDoc = mapOf(
                 "transferId" to transfer.transferId,
@@ -370,7 +397,7 @@ class FirebaseDatabaseManager {
                 "timestamp" to System.currentTimeMillis()
             )
 
-            firestore.collection("transfer_proposals")
+            fs.collection("transfer_proposals")
                 .document(transfer.transferId)
                 .set(proposalDoc, SetOptions.merge())
                 .await()
@@ -383,9 +410,15 @@ class FirebaseDatabaseManager {
     }
 
     fun observeIncomingTransferProposals(myUserId: String, mySpreDropId: String): Flow<List<TransferRecord>> = callbackFlow {
+        val fs = firestore
+        if (fs == null) {
+            trySend(emptyList())
+            awaitClose { }
+            return@callbackFlow
+        }
         var registration: ListenerRegistration? = null
         try {
-            registration = firestore.collection("transfer_proposals")
+            registration = fs.collection("transfer_proposals")
                 .whereEqualTo("receiverSpreDropId", mySpreDropId)
                 .whereEqualTo("status", "PENDING")
                 .addSnapshotListener { snapshots, error ->
@@ -442,8 +475,9 @@ class FirebaseDatabaseManager {
     }
 
     suspend fun updateProposalStatus(transferId: String, status: String): Result<Unit> {
+        val fs = firestore ?: return Result.failure(IllegalStateException("Firestore not initialized"))
         return try {
-            firestore.collection("transfer_proposals")
+            fs.collection("transfer_proposals")
                 .document(transferId)
                 .update("status", status)
                 .await()

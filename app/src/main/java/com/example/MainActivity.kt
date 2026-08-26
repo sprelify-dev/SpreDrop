@@ -56,7 +56,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        TransferNotificationHelper.initNotificationChannels(this)
+        try {
+            TransferNotificationHelper.initNotificationChannels(this)
+        } catch (_: Exception) {}
 
         setContent {
             MyApplicationTheme {

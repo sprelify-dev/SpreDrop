@@ -7,6 +7,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
@@ -31,17 +32,25 @@ class SpreDropBackgroundDiscoveryService : Service() {
         private const val CHANNEL_DISCOVERY = "channel_spredrop_discovery"
 
         fun start(context: Context) {
-            val intent = Intent(context, SpreDropBackgroundDiscoveryService::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(intent)
-            } else {
-                context.startService(intent)
+            try {
+                val intent = Intent(context, SpreDropBackgroundDiscoveryService::class.java)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(intent)
+                } else {
+                    context.startService(intent)
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Service start skipped or not allowed: ${e.message}")
             }
         }
 
         fun stop(context: Context) {
-            val intent = Intent(context, SpreDropBackgroundDiscoveryService::class.java)
-            context.stopService(intent)
+            try {
+                val intent = Intent(context, SpreDropBackgroundDiscoveryService::class.java)
+                context.stopService(intent)
+            } catch (e: Exception) {
+                Log.w(TAG, "Service stop warning: ${e.message}")
+            }
         }
     }
 
@@ -52,7 +61,29 @@ class SpreDropBackgroundDiscoveryService : Service() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
-        startForeground(NOTIFICATION_ID, createForegroundNotification())
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                try {
+                    startForeground(
+                        NOTIFICATION_ID,
+                        createForegroundNotification(),
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE or ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                    )
+                } catch (_: Exception) {
+                    startForeground(NOTIFICATION_ID, createForegroundNotification())
+                }
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(
+                    NOTIFICATION_ID,
+                    createForegroundNotification(),
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
+                )
+            } else {
+                startForeground(NOTIFICATION_ID, createForegroundNotification())
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Foreground notification start warning: ${e.message}")
+        }
         startProximityEngine()
     }
 

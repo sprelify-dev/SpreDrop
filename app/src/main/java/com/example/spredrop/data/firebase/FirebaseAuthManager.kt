@@ -34,18 +34,35 @@ sealed interface AuthState {
 
 class FirebaseAuthManager(private val context: Context) {
 
-    private val auth: FirebaseAuth by lazy { FirebaseAuth.getInstance() }
+    private val auth: FirebaseAuth? by lazy {
+        try {
+            FirebaseAuth.getInstance()
+        } catch (e: Exception) {
+            null
+        }
+    }
     private val credentialManager: CredentialManager by lazy { CredentialManager.create(context) }
 
     private val _authState = MutableStateFlow<AuthState>(
-        if (auth.currentUser != null) AuthState.Authenticated(auth.currentUser!!) else AuthState.SignedOut
+        try {
+            val user = auth?.currentUser
+            if (user != null) AuthState.Authenticated(user) else AuthState.SignedOut
+        } catch (_: Exception) {
+            AuthState.SignedOut
+        }
     )
     val authState: StateFlow<AuthState> = _authState.asStateFlow()
 
     val currentUser: FirebaseUser?
-        get() = auth.currentUser
+        get() = try { auth?.currentUser } catch (_: Exception) { null }
 
     val userFlow: Flow<FirebaseUser?> = callbackFlow {
+        val authInstance = auth
+        if (authInstance == null) {
+            trySend(null)
+            awaitClose { }
+            return@callbackFlow
+        }
         val listener = FirebaseAuth.AuthStateListener { firebaseAuth ->
             val user = firebaseAuth.currentUser
             trySend(user)
@@ -55,16 +72,17 @@ class FirebaseAuthManager(private val context: Context) {
                 _authState.value = AuthState.SignedOut
             }
         }
-        auth.addAuthStateListener(listener)
+        authInstance.addAuthStateListener(listener)
         awaitClose {
-            auth.removeAuthStateListener(listener)
+            authInstance.removeAuthStateListener(listener)
         }
     }
 
     suspend fun signInWithEmail(email: String, pass: String): Result<FirebaseUser> {
+        val authInstance = auth ?: return Result.failure(IllegalStateException("Firebase Auth not initialized"))
         _authState.value = AuthState.Loading
         return try {
-            val result = auth.signInWithEmailAndPassword(email.trim(), pass).await()
+            val result = authInstance.signInWithEmailAndPassword(email.trim(), pass).await()
             val user = result.user ?: throw IllegalStateException("User not found after sign in")
             _authState.value = AuthState.Authenticated(user)
             Result.success(user)
@@ -81,9 +99,10 @@ class FirebaseAuthManager(private val context: Context) {
         displayName: String,
         spreDropId: String
     ): Result<FirebaseUser> {
+        val authInstance = auth ?: return Result.failure(IllegalStateException("Firebase Auth not initialized"))
         _authState.value = AuthState.Loading
         return try {
-            val result = auth.createUserWithEmailAndPassword(email.trim(), pass).await()
+            val result = authInstance.createUserWithEmailAndPassword(email.trim(), pass).await()
             val user = result.user ?: throw IllegalStateException("User creation failed")
 
             // Update display name
@@ -102,6 +121,7 @@ class FirebaseAuthManager(private val context: Context) {
     }
 
     suspend fun signInWithGoogle(webClientId: String? = null): Result<FirebaseUser> {
+        val authInstance = auth ?: return Result.failure(IllegalStateException("Firebase Auth not initialized"))
         _authState.value = AuthState.Loading
         return try {
             val rawNonce = UUID.randomUUID().toString()
@@ -133,7 +153,7 @@ class FirebaseAuthManager(private val context: Context) {
                 val googleIdTokenCredential = GoogleIdTokenCredential.createFrom(credential.data)
                 val idToken = googleIdTokenCredential.idToken
                 val authCredential = GoogleAuthProvider.getCredential(idToken, null)
-                val authResult = auth.signInWithCredential(authCredential).await()
+                val authResult = authInstance.signInWithCredential(authCredential).await()
                 val user = authResult.user ?: throw IllegalStateException("Firebase user was null")
                 _authState.value = AuthState.Authenticated(user)
                 Result.success(user)
@@ -164,8 +184,9 @@ class FirebaseAuthManager(private val context: Context) {
     }
 
     suspend fun sendPasswordReset(email: String): Result<Unit> {
+        val authInstance = auth ?: return Result.failure(IllegalStateException("Firebase Auth not initialized"))
         return try {
-            auth.sendPasswordResetEmail(email.trim()).await()
+            authInstance.sendPasswordResetEmail(email.trim()).await()
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -174,7 +195,7 @@ class FirebaseAuthManager(private val context: Context) {
 
     suspend fun signOut(): Result<Unit> {
         return try {
-            auth.signOut()
+            auth?.signOut()
             try {
                 credentialManager.clearCredentialState(ClearCredentialStateRequest())
             } catch (_: Exception) {}
@@ -187,9 +208,10 @@ class FirebaseAuthManager(private val context: Context) {
 
     fun clearError() {
         if (_authState.value is AuthState.Error) {
-            _authState.value = if (auth.currentUser != null) {
-                AuthState.Authenticated(auth.currentUser!!)
-            } else {
+            _authState.value = try {
+                val user = auth?.currentUser
+                if (user != null) AuthState.Authenticated(user) else AuthState.SignedOut
+            } catch (_: Exception) {
                 AuthState.SignedOut
             }
         }
