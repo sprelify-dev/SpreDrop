@@ -81,6 +81,17 @@ class SpreDropRepository(private val context: Context) {
     init {
         repoScope.launch {
             setupAuthSync()
+            autoPruneOldData()
+        }
+    }
+
+    private suspend fun autoPruneOldData() {
+        try {
+            val thirtyDaysAgo = System.currentTimeMillis() - (30L * 24L * 60L * 60L * 1000L)
+            transferDao.pruneOldTransfers(thirtyDaysAgo)
+            databaseManager.pruneOldCloudData()
+        } catch (e: Exception) {
+            // Ignore
         }
     }
 

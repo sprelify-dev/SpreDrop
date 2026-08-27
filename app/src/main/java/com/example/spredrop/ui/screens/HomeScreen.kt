@@ -104,7 +104,7 @@ fun HomeScreen(
                 userProfile = userProfile,
                 isOnline = isOnline,
                 onPresenceClick = { showPresenceDialog = true },
-                onSimulateTransfer = { viewModel.triggerSimulatedIncomingTransfer() }
+                onSimulateTransfer = { viewModel.refreshDiscovery() }
             )
         },
         floatingActionButton = {

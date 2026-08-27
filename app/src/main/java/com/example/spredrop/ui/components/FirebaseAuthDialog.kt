@@ -429,6 +429,17 @@ fun FirebaseAuthDialog(
                             fontWeight = FontWeight.SemiBold
                         )
                     }
+
+                    Spacer(Modifier.height(10.dp))
+
+                    Text(
+                        text = "Google Sign-In setup: Please ensure you have registered your custom debug & release SHA-1/SHA-256 fingerprints in the Firebase Console Settings for this package name: com.sprelify.spredrop.",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        modifier = Modifier.padding(horizontal = 8.dp)
+                    )
                 }
 
                 Spacer(Modifier.height(16.dp))

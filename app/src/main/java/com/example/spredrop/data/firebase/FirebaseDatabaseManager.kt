@@ -511,4 +511,45 @@ class FirebaseDatabaseManager {
             Result.failure(e)
         }
     }
+
+    suspend fun pruneOldCloudData(): Result<Unit> {
+        val fs = firestore
+        if (fs == null || !isConfigured) return Result.success(Unit)
+        return try {
+            val thirtyDaysAgo = System.currentTimeMillis() - (30L * 24 * 60 * 60 * 1000)
+            
+            // Prune old transfers
+            val oldTransfers = fs.collection("transfers")
+                .whereLessThan("timestamp", thirtyDaysAgo)
+                .get()
+                .await()
+            for (doc in oldTransfers.documents) {
+                doc.reference.delete()
+            }
+            
+            // Prune old friend requests
+            val oldReqs = fs.collection("friend_requests")
+                .whereLessThan("timestamp", thirtyDaysAgo)
+                .get()
+                .await()
+            for (doc in oldReqs.documents) {
+                doc.reference.delete()
+            }
+
+            // Prune old transfer proposals
+            val oldProposals = fs.collection("transfer_proposals")
+                .whereLessThan("timestamp", thirtyDaysAgo)
+                .get()
+                .await()
+            for (doc in oldProposals.documents) {
+                doc.reference.delete()
+            }
+
+            Log.i("FirebaseDatabaseManager", "Successfully pruned old cloud data (older than 30 days) from Firestore.")
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e("FirebaseDatabaseManager", "Failed to prune old cloud data: ${e.message}")
+            Result.failure(e)
+        }
+    }
 }

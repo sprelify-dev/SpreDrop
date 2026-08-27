@@ -50,11 +50,25 @@ fun ProfileSettingsScreen(
     var showEditProfileDialog by remember { mutableStateOf(false) }
     var showLogsDialog by remember { mutableStateOf(false) }
     var showAuthDialog by remember { mutableStateOf(false) }
+    var showPrivacyPolicyDialog by remember { mutableStateOf(false) }
+    var showTermsDialog by remember { mutableStateOf(false) }
 
     if (showAuthDialog) {
         FirebaseAuthDialog(
             viewModel = viewModel,
             onDismiss = { showAuthDialog = false }
+        )
+    }
+
+    if (showPrivacyPolicyDialog) {
+        PrivacyPolicyDialog(
+            onDismiss = { showPrivacyPolicyDialog = false }
+        )
+    }
+
+    if (showTermsDialog) {
+        TermsAndConditionsDialog(
+            onDismiss = { showTermsDialog = false }
         )
     }
 
@@ -397,6 +411,81 @@ fun ProfileSettingsScreen(
                 }
             }
 
+            // Legal Policies Section
+            item {
+                Text(
+                    text = "Legal & Privacy",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+
+            item {
+                Surface(
+                    color = MaterialTheme.colorScheme.surface,
+                    shape = RoundedCornerShape(16.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.surfaceVariant),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { showPrivacyPolicyDialog = true }
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.PrivacyTip,
+                                    contentDescription = null,
+                                    tint = SpreTealPrimary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Text("Privacy Policy", fontWeight = FontWeight.SemiBold)
+                            }
+                            Icon(
+                                imageVector = Icons.Default.ChevronRight,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { showTermsDialog = true }
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Gavel,
+                                    contentDescription = null,
+                                    tint = SpreTealPrimary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Text("Terms & Conditions", fontWeight = FontWeight.SemiBold)
+                            }
+                            Icon(
+                                imageVector = Icons.Default.ChevronRight,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+
             // Developer & Diagnostics Section
             item {
                 Text(
@@ -603,6 +692,240 @@ fun DevLogsDialog(
         confirmButton = {
             TextButton(onClick = onDismiss) {
                 Text("Done")
+            }
+        }
+    )
+}
+
+@Composable
+fun PrivacyPolicyDialog(
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Icon(Icons.Default.PrivacyTip, contentDescription = null, tint = SpreTealPrimary)
+                Text("Privacy Policy", fontWeight = FontWeight.Bold)
+            }
+        },
+        text = {
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(340.dp)
+            ) {
+                LazyColumn(
+                    contentPadding = PaddingValues(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    item {
+                        Text(
+                            text = "Welcome to SpreDrop!",
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                    }
+                    item {
+                        Text(
+                            text = "Your privacy is our absolute, highest priority. SpreDrop is designed as a direct peer-to-peer (P2P) local-first file sharing network. We have established strict guidelines to make sure your data remains 100% private.",
+                            fontSize = 13.sp,
+                            lineHeight = 18.sp
+                        )
+                    }
+                    item {
+                        Text(
+                            text = "1. No Local Storage Logs",
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 13.sp
+                        )
+                        Text(
+                            text = "SpreDrop does not collect, index, or parse the files you transfer. All files remain strictly on your local device storage, accessible only to you.",
+                            fontSize = 12.sp,
+                            lineHeight = 16.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    item {
+                        Text(
+                            text = "2. Offline-First Transfers",
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 13.sp
+                        )
+                        Text(
+                            text = "When devices are within range, SpreDrop transfers file data completely offline using peer-to-peer RFCOMM or local Wi-Fi channels, completely bypassing the internet and external cloud storage.",
+                            fontSize = 12.sp,
+                            lineHeight = 16.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    item {
+                        Text(
+                            text = "3. Encrypted Cloud Relay",
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 13.sp
+                        )
+                        Text(
+                            text = "For remote transfers (when devices are out of local range), SpreDrop utilizes an encrypted cloud relay. File chunks are securely sent using WebRTC with full end-to-end encryption. The cloud relay cannot read or decrypt your files.",
+                            fontSize = 12.sp,
+                            lineHeight = 16.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    item {
+                        Text(
+                            text = "4. Strict 30-Day Auto-Purge Policy",
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 13.sp
+                        )
+                        Text(
+                            text = "Any signaling data, temporary transfer records, or pending/accepted transfer proposals older than 30 days are automatically deleted permanently from both your local database and the Firestore cloud database.",
+                            fontSize = 12.sp,
+                            lineHeight = 16.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    item {
+                        Text(
+                            text = "5. No Diagnostic Data Selling",
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 13.sp
+                        )
+                        Text(
+                            text = "SpreDrop does not track your location, behavior, or monetize your activity. The app is open-source, non-commercial, and crafted strictly for secure utility.",
+                            fontSize = 12.sp,
+                            lineHeight = 16.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Dismiss", fontWeight = FontWeight.Bold, color = SpreTealPrimary)
+            }
+        }
+    )
+}
+
+@Composable
+fun TermsAndConditionsDialog(
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Icon(Icons.Default.Gavel, contentDescription = null, tint = SpreTealPrimary)
+                Text("Terms & Conditions", fontWeight = FontWeight.Bold)
+            }
+        },
+        text = {
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(340.dp)
+            ) {
+                LazyColumn(
+                    contentPadding = PaddingValues(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    item {
+                        Text(
+                            text = "Agreement to Terms",
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                    }
+                    item {
+                        Text(
+                            text = "By accessing or using the SpreDrop application, you agree to be bound by these Terms and Conditions. Please review them carefully.",
+                            fontSize = 13.sp,
+                            lineHeight = 18.sp
+                        )
+                    }
+                    item {
+                        Text(
+                            text = "1. Acceptable Use Policy",
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 13.sp
+                        )
+                        Text(
+                            text = "You are strictly responsible for all files, media, and records you share using SpreDrop. You agree not to distribute illegal, offensive, copyright-infringing, or malicious content (including viruses or trojans).",
+                            fontSize = 12.sp,
+                            lineHeight = 16.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    item {
+                        Text(
+                            text = "2. No Peer Liability",
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 13.sp
+                        )
+                        Text(
+                            text = "SpreDrop acts strictly as a direct peer-to-peer data transport pipeline. SpreDrop has no oversight, ownership, or control over the data passing between you and other users. Under no circumstances shall SpreDrop be held liable for any data loss, leakage, or transfer failure.",
+                            fontSize = 12.sp,
+                            lineHeight = 16.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    item {
+                        Text(
+                            text = "3. Google Sign-In & Auth Integration",
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 13.sp
+                        )
+                        Text(
+                            text = "SpreDrop integrates Google Sign-In and Firebase Authentication to securely verify user accounts and ensure P2P identity matching. You agree to safeguard your Google credentials and authenticate accurately.",
+                            fontSize = 12.sp,
+                            lineHeight = 16.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    item {
+                        Text(
+                            text = "4. Service Disclaimers",
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 13.sp
+                        )
+                        Text(
+                            text = "SpreDrop is provided on an 'AS-IS' and 'AS-AVAILABLE' basis without any warranties of any kind, whether express, implied, or statutory. We make no guarantees regarding continuous connection or speed.",
+                            fontSize = 12.sp,
+                            lineHeight = 16.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    item {
+                        Text(
+                            text = "5. Modification of Terms",
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 13.sp
+                        )
+                        Text(
+                            text = "We reserve the right to modify these terms at any time. Your continued use of the application following the posting of changes constitutes acceptance of those updates.",
+                            fontSize = 12.sp,
+                            lineHeight = 16.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("I Accept", fontWeight = FontWeight.Bold, color = SpreTealPrimary)
             }
         }
     )

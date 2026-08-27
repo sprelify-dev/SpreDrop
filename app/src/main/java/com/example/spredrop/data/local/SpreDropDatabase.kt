@@ -171,6 +171,9 @@ interface TransferDao {
     @Query("DELETE FROM transfers WHERE transferId = :transferId")
     suspend fun deleteTransfer(transferId: String)
 
+    @Query("DELETE FROM transfers WHERE timestamp < :cutoffTimestamp")
+    suspend fun pruneOldTransfers(cutoffTimestamp: Long)
+
     @Query("DELETE FROM transfers WHERE status NOT IN ('PENDING', 'ACCEPTED', 'NEGOTIATING_WEBRTC', 'TRANSFERRING', 'VERIFYING')")
     suspend fun clearCompletedHistory()
 }
