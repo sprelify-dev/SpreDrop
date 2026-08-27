@@ -249,6 +249,11 @@ class SpreDropRepository(private val context: Context) {
 
     suspend fun sendFriendRequest(targetSpreDropId: String, targetDisplayName: String) {
         val cleanId = if (targetSpreDropId.startsWith("@")) targetSpreDropId else "@$targetSpreDropId"
+        val profile = userDao.getUserProfileOnce()
+        if (profile != null) {
+            databaseManager.sendCloudFriendRequest(profile, cleanId)
+        }
+
         val existing = friendDao.getFriendBySpreDropId(cleanId)
         if (existing != null) {
             if (existing.status == FriendStatus.NONE || existing.status == FriendStatus.REQUEST_RECEIVED) {
@@ -268,10 +273,25 @@ class SpreDropRepository(private val context: Context) {
 
     suspend fun acceptFriendRequest(friendId: String) {
         friendDao.updateFriendStatus(friendId, FriendStatus.FRIENDS)
+        val profile = userDao.getUserProfileOnce()
+        if (profile != null) {
+            val requestId = "req_${friendId}_${profile.spreDropId.replace("@", "")}"
+            databaseManager.updateCloudFriendRequestStatus(requestId, "ACCEPTED")
+            val friend = friendDao.getFriendById(friendId)
+            if (friend != null) {
+                val reverseRequestId = "req_${profile.userId}_${friend.spreDropId.replace("@", "")}"
+                databaseManager.updateCloudFriendRequestStatus(reverseRequestId, "ACCEPTED")
+            }
+        }
     }
 
     suspend fun rejectFriendRequest(friendId: String) {
         friendDao.deleteFriend(friendId)
+        val profile = userDao.getUserProfileOnce()
+        if (profile != null) {
+            val requestId = "req_${friendId}_${profile.spreDropId.replace("@", "")}"
+            databaseManager.updateCloudFriendRequestStatus(requestId, "REJECTED")
+        }
     }
 
     suspend fun removeFriend(friendId: String) {

@@ -57,6 +57,7 @@ class SpreDropSignalingManager(
     private var heartbeatJob: Job? = null
     private var cloudPeerJob: Job? = null
     private var cloudProposalJob: Job? = null
+    private var cloudFriendRequestJob: Job? = null
 
     private val bleManager = SpreDropBleManager(context) { blePeer ->
         handleBlePeerDiscovered(blePeer)
@@ -116,17 +117,31 @@ class SpreDropSignalingManager(
             while (isActive) {
                 if (_isOnline.value) {
                     val profile = userDao.getUserProfileOnce()
-                    if (profile != null && profile.visibility != PrivacyMode.INVISIBLE) {
-                        userDao.updatePresence(profile.userId, profile.availability, System.currentTimeMillis())
-                        databaseManager.publishPeerPresence(
-                            userId = profile.userId,
-                            spreDropId = profile.spreDropId,
-                            displayName = profile.displayName,
-                            avatarColorHex = profile.avatarColorHex,
-                            availability = profile.availability,
-                            isOnline = true
-                        )
-                        log("SIGNAL", "Presence heartbeat ACK for ${profile.spreDropId} [${profile.availability.name}]")
+                    if (profile != null) {
+                        val isVisible = profile.visibility != PrivacyMode.INVISIBLE && profile.availability != UserPresence.INVISIBLE && profile.availability != UserPresence.OFFLINE
+                        if (isVisible) {
+                            userDao.updatePresence(profile.userId, profile.availability, System.currentTimeMillis())
+                            databaseManager.publishPeerPresence(
+                                userId = profile.userId,
+                                spreDropId = profile.spreDropId,
+                                displayName = profile.displayName,
+                                avatarColorHex = profile.avatarColorHex,
+                                availability = profile.availability,
+                                isOnline = true
+                            )
+                            log("SIGNAL", "Presence heartbeat ACK for ${profile.spreDropId} [${profile.availability.name}]")
+                        } else {
+                            databaseManager.publishPeerPresence(
+                                userId = profile.userId,
+                                spreDropId = profile.spreDropId,
+                                displayName = profile.displayName,
+                                avatarColorHex = profile.avatarColorHex,
+                                availability = profile.availability,
+                                isOnline = false
+                            )
+                            bleManager.stopAdvertising()
+                            log("SIGNAL", "Presence set to INVISIBLE/OFFLINE. Cleaned Firestore & stopped BLE advertising.")
+                        }
                     }
                 }
                 // Prune stale BLE/Cloud peers (> 2 minutes without beacon)
@@ -168,18 +183,42 @@ class SpreDropSignalingManager(
                     }
                 }
             }
+
+            // Listen to real incoming friend requests from Firestore
+            cloudFriendRequestJob?.cancel()
+            cloudFriendRequestJob = launch {
+                databaseManager.observeIncomingCloudFriendRequests(profile.spreDropId).collect { requests ->
+                    requests.forEach { req ->
+                        val existing = friendDao.getFriendById(req.fromUserId)
+                        if (existing == null || existing.status == FriendStatus.NONE) {
+                            val newFriend = Friend(
+                                userId = req.fromUserId,
+                                spreDropId = req.fromSpreDropId,
+                                displayName = req.fromDisplayName,
+                                avatarColorHex = req.fromAvatarColorHex,
+                                status = FriendStatus.REQUEST_RECEIVED,
+                                lastSeen = req.timestamp
+                            )
+                            friendDao.insertOrUpdateFriend(newFriend)
+                            log("SIGNAL", "New friend request received from ${req.fromSpreDropId} (${req.fromDisplayName})")
+                        }
+                    }
+                }
+            }
         }
     }
 
     private fun startBleDiscovery() {
         signalingScope.launch {
             val profile = userDao.getUserProfileOnce()
-            if (profile != null && profile.visibility != PrivacyMode.INVISIBLE) {
+            if (profile != null && profile.visibility != PrivacyMode.INVISIBLE && profile.availability != UserPresence.INVISIBLE && profile.availability != UserPresence.OFFLINE) {
                 bleManager.startAdvertising(
                     spreDropId = profile.spreDropId,
                     displayName = profile.displayName,
                     userId = profile.userId
                 )
+            } else {
+                bleManager.stopAdvertising()
             }
             bleManager.startScanning()
             log("DISCOVERY", "BLE Proximity Advertiser & Scanner initialized with SpreDrop Service UUID")
@@ -197,25 +236,41 @@ class SpreDropSignalingManager(
     }
 
     private fun combineAndPublishDiscoveredPeers() {
+        val selfProfile = kotlinx.coroutines.runBlocking {
+            try {
+                userDao.getUserProfileOnce()
+            } catch (e: Exception) {
+                null
+            }
+        }
+        val selfSpreDropId = selfProfile?.spreDropId?.lowercase() ?: ""
+        val selfUserId = selfProfile?.userId ?: ""
+
         val combined = mutableMapOf<String, PeerDevice>()
 
         // 1. Cloud online peers
         synchronized(cloudPeersMap) {
-            cloudPeersMap.forEach { (key, peer) -> combined[key] = peer }
+            cloudPeersMap.forEach { (key, peer) -> 
+                if (peer.deviceId != selfUserId && peer.spreDropId.lowercase() != selfSpreDropId) {
+                    combined[key] = peer
+                }
+            }
         }
 
         // 2. BLE proximity peers (take priority for RSSI & connection type)
         synchronized(blePeersMap) {
             blePeersMap.forEach { (key, blePeer) ->
-                val existing = combined[key]
-                if (existing != null) {
-                    combined[key] = existing.copy(
-                        signalStrengthRssi = blePeer.signalStrengthRssi,
-                        connectionType = PeerConnectionType.NEARBY_BLE,
-                        lastDiscovered = System.currentTimeMillis()
-                    )
-                } else {
-                    combined[key] = blePeer
+                if (blePeer.deviceId != selfUserId && blePeer.spreDropId.lowercase() != selfSpreDropId) {
+                    val existing = combined[key]
+                    if (existing != null) {
+                        combined[key] = existing.copy(
+                            signalStrengthRssi = blePeer.signalStrengthRssi,
+                            connectionType = PeerConnectionType.NEARBY_BLE,
+                            lastDiscovered = System.currentTimeMillis()
+                        )
+                    } else {
+                        combined[key] = blePeer
+                    }
                 }
             }
         }
@@ -223,8 +278,10 @@ class SpreDropSignalingManager(
         // 3. Manually paired peers
         synchronized(manualPeersMap) {
             manualPeersMap.forEach { (key, peer) ->
-                if (!combined.containsKey(key)) {
-                    combined[key] = peer
+                if (peer.deviceId != selfUserId && peer.spreDropId.lowercase() != selfSpreDropId) {
+                    if (!combined.containsKey(key)) {
+                        combined[key] = peer
+                    }
                 }
             }
         }

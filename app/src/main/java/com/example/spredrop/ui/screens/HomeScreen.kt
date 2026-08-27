@@ -682,27 +682,27 @@ fun ActiveTransferCard(
 @Composable
 fun getDistanceInfo(rssi: Int): Triple<Int, String, Color> {
     val percentage = when {
-        rssi >= -50 -> {
-            // green range: mapped to under 20% near range (e.g. 10% to 20%)
-            val ratio = (rssi - (-50)).toFloat() / ((-40) - (-50)) // 0..1
+        rssi >= -68 -> {
+            // green range: mapped to under 20% near range (e.g. 10% to 20%) - touch and same room
+            val ratio = (rssi - (-68)).toFloat() / ((-30) - (-68)) // 0..1
             (20 - (ratio * 10)).toInt().coerceIn(10, 20)
         }
-        rssi >= -75 -> {
-            // orange range: mapped to medium range (e.g. 21% to 60%)
-            val ratio = (rssi - (-75)).toFloat() / ((-51) - (-75)) // 0..1
+        rssi >= -82 -> {
+            // orange range: mapped to medium range (e.g. 21% to 60%) - further away / outside room
+            val ratio = (rssi - (-82)).toFloat() / ((-69) - (-82)) // 0..1
             (60 - (ratio * 39)).toInt().coerceIn(21, 60)
         }
         else -> {
-            // red range: mapped to end of range (e.g. 61% to 98%)
-            val ratio = (rssi - (-100)).toFloat() / ((-76) - (-100)) // 0..1
+            // red range: mapped to end of range (e.g. 61% to 98%) - far / another room
+            val ratio = (rssi - (-100)).toFloat() / ((-83) - (-100)) // 0..1
             (98 - (ratio * 37)).toInt().coerceIn(61, 98)
         }
     }
     
     val (label, color) = when {
-        percentage <= 20 -> Pair("Near (Under 20%)", Color(0xFF10B981)) // Green
-        percentage <= 60 -> Pair("Medium Distance (60%)", Color(0xFFF59E0B)) // Orange
-        else -> Pair("Far Range (>60%)", Color(0xFFEF4444)) // Red
+        percentage <= 20 -> Pair("Near / Same Room (<20%)", Color(0xFF10B981)) // Green
+        percentage <= 60 -> Pair("Mid Range / Outside (60%)", Color(0xFFF59E0B)) // Orange
+        else -> Pair("Far / Distant (>60%)", Color(0xFFEF4444)) // Red
     }
     
     return Triple(percentage, label, color)

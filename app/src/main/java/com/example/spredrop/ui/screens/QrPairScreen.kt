@@ -348,23 +348,26 @@ fun ScanQrCodeTab(
                                     it.surfaceProvider = previewView.surfaceProvider
                                 }
 
+                                val scanner = BarcodeScanning.getClient()
+                                var hasScanned = false
+
                                 val imageAnalysis = ImageAnalysis.Builder()
                                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                                     .build()
 
                                 imageAnalysis.setAnalyzer(ContextCompat.getMainExecutor(ctx)) { imageProxy ->
                                     val mediaImage = imageProxy.image
-                                    if (mediaImage != null) {
+                                    if (mediaImage != null && !hasScanned) {
                                         val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
-                                        val scanner = BarcodeScanning.getClient()
                                         scanner.process(image)
                                             .addOnSuccessListener { barcodes ->
                                                 for (barcode in barcodes) {
-                                                    val rawValue = barcode.rawValue
-                                                    if (!rawValue.isNullOrBlank()) {
-                                                        onCodeScanned(rawValue)
-                                                        break
-                                                    }
+                                                     val rawValue = barcode.rawValue
+                                                     if (!rawValue.isNullOrBlank() && !hasScanned) {
+                                                         hasScanned = true
+                                                         onCodeScanned(rawValue)
+                                                         break
+                                                     }
                                                 }
                                             }
                                             .addOnFailureListener { exc ->

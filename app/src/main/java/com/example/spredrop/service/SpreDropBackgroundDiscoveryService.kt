@@ -112,25 +112,45 @@ class SpreDropBackgroundDiscoveryService : Service() {
                 Log.d(TAG, "Background discovered nearby peer: ${discoveredPeer.spreDropId} (${discoveredPeer.signalStrengthRssi} dBm)")
             }
 
-            // Start BLE advertising & scanning
-            bleManager?.startAdvertising(
-                spreDropId = profile.spreDropId,
-                displayName = profile.displayName,
-                userId = profile.userId
-            )
+            // Start BLE scanning
             bleManager?.startScanning()
 
-            // Periodic presence heartbeat to Firestore
+            // Periodic presence heartbeat to Firestore with dynamic visibility checks
             while (isActive) {
-                if (authUser != null) {
-                    databaseManager.publishPeerPresence(
-                        userId = profile.userId,
-                        spreDropId = profile.spreDropId,
-                        displayName = profile.displayName,
-                        avatarColorHex = profile.avatarColorHex,
-                        availability = profile.availability,
-                        isOnline = true
-                    )
+                val currentProfile = userDao.getUserProfileOnce()
+                if (currentProfile != null) {
+                    val isVisible = currentProfile.visibility != com.example.spredrop.model.PrivacyMode.INVISIBLE && 
+                                    currentProfile.availability != com.example.spredrop.model.UserPresence.INVISIBLE && 
+                                    currentProfile.availability != com.example.spredrop.model.UserPresence.OFFLINE
+                    if (isVisible) {
+                        bleManager?.startAdvertising(
+                            spreDropId = currentProfile.spreDropId,
+                            displayName = currentProfile.displayName,
+                            userId = currentProfile.userId
+                        )
+                        if (authUser != null) {
+                            databaseManager.publishPeerPresence(
+                                userId = currentProfile.userId,
+                                spreDropId = currentProfile.spreDropId,
+                                displayName = currentProfile.displayName,
+                                avatarColorHex = currentProfile.avatarColorHex,
+                                availability = currentProfile.availability,
+                                isOnline = true
+                            )
+                        }
+                    } else {
+                        bleManager?.stopAdvertising()
+                        if (authUser != null) {
+                            databaseManager.publishPeerPresence(
+                                userId = currentProfile.userId,
+                                spreDropId = currentProfile.spreDropId,
+                                displayName = currentProfile.displayName,
+                                avatarColorHex = currentProfile.avatarColorHex,
+                                availability = currentProfile.availability,
+                                isOnline = false
+                            )
+                        }
+                    }
                 }
                 delay(15000) // 15s heartbeat
             }
