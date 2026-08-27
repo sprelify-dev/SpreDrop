@@ -249,8 +249,8 @@ class FirebaseAuthManager(private val context: Context) {
     ): Result<AuthenticatedAccount> {
         val cleanEmail = email.trim().lowercase()
         val cleanName = displayName.trim().ifBlank { "User" }
-        val rawHandle = spreDropId.trim().removePrefix("@")
-        val cleanHandle = "@" + (if (rawHandle.isNotBlank()) rawHandle else cleanEmail.substringBefore("@").replace(".", "_"))
+        val rawHandle = spreDropId.trim().lowercase().removePrefix("@")
+        val cleanHandle = "@" + (if (rawHandle.isNotBlank()) rawHandle else cleanEmail.substringBefore("@").lowercase().replace(".", "_"))
 
         if (cleanEmail.isBlank() || !cleanEmail.contains("@")) {
             val msg = "Please enter a valid email address."

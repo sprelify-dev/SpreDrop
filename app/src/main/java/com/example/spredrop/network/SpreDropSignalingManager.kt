@@ -63,11 +63,25 @@ class SpreDropSignalingManager(
         handleBlePeerDiscovered(blePeer)
     }
 
+    private var profileObserverJob: Job? = null
+
     init {
         setupNetworkMonitor()
-        startPresenceHeartbeat()
-        startCloudListeners()
-        startBleDiscovery()
+        observeProfileChanges()
+    }
+
+    private fun observeProfileChanges() {
+        profileObserverJob?.cancel()
+        profileObserverJob = signalingScope.launch {
+            userDao.getUserProfile().collect { profile ->
+                if (profile != null) {
+                    log("PROFILE", "Profile updated dynamically in local DB: ${profile.spreDropId} (${profile.displayName})")
+                    startPresenceHeartbeat(profile)
+                    startCloudListeners(profile)
+                    startBleDiscovery(profile)
+                }
+            }
+        }
     }
 
     private fun setupNetworkMonitor() {
@@ -111,37 +125,34 @@ class SpreDropSignalingManager(
         }
     }
 
-    private fun startPresenceHeartbeat() {
+    private fun startPresenceHeartbeat(profile: UserProfile) {
         heartbeatJob?.cancel()
         heartbeatJob = signalingScope.launch {
             while (isActive) {
                 if (_isOnline.value) {
-                    val profile = userDao.getUserProfileOnce()
-                    if (profile != null) {
-                        val isVisible = profile.visibility != PrivacyMode.INVISIBLE && profile.availability != UserPresence.INVISIBLE && profile.availability != UserPresence.OFFLINE
-                        if (isVisible) {
-                            userDao.updatePresence(profile.userId, profile.availability, System.currentTimeMillis())
-                            databaseManager.publishPeerPresence(
-                                userId = profile.userId,
-                                spreDropId = profile.spreDropId,
-                                displayName = profile.displayName,
-                                avatarColorHex = profile.avatarColorHex,
-                                availability = profile.availability,
-                                isOnline = true
-                            )
-                            log("SIGNAL", "Presence heartbeat ACK for ${profile.spreDropId} [${profile.availability.name}]")
-                        } else {
-                            databaseManager.publishPeerPresence(
-                                userId = profile.userId,
-                                spreDropId = profile.spreDropId,
-                                displayName = profile.displayName,
-                                avatarColorHex = profile.avatarColorHex,
-                                availability = profile.availability,
-                                isOnline = false
-                            )
-                            bleManager.stopAdvertising()
-                            log("SIGNAL", "Presence set to INVISIBLE/OFFLINE. Cleaned Firestore & stopped BLE advertising.")
-                        }
+                    val isVisible = profile.visibility != PrivacyMode.INVISIBLE && profile.availability != UserPresence.INVISIBLE && profile.availability != UserPresence.OFFLINE
+                    if (isVisible) {
+                        userDao.updatePresence(profile.userId, profile.availability, System.currentTimeMillis())
+                        databaseManager.publishPeerPresence(
+                            userId = profile.userId,
+                            spreDropId = profile.spreDropId,
+                            displayName = profile.displayName,
+                            avatarColorHex = profile.avatarColorHex,
+                            availability = profile.availability,
+                            isOnline = true
+                        )
+                        log("SIGNAL", "Presence heartbeat ACK for ${profile.spreDropId} [${profile.availability.name}]")
+                    } else {
+                        databaseManager.publishPeerPresence(
+                            userId = profile.userId,
+                            spreDropId = profile.spreDropId,
+                            displayName = profile.displayName,
+                            avatarColorHex = profile.avatarColorHex,
+                            availability = profile.availability,
+                            isOnline = false
+                        )
+                        bleManager.stopAdvertising()
+                        log("SIGNAL", "Presence set to INVISIBLE/OFFLINE. Cleaned Firestore & stopped BLE advertising.")
                     }
                 }
                 // Prune stale BLE/Cloud peers (> 2 minutes without beacon)
@@ -151,79 +162,76 @@ class SpreDropSignalingManager(
         }
     }
 
-    private fun startCloudListeners() {
-        signalingScope.launch {
-            val profile = userDao.getUserProfileOnce() ?: return@launch
-
-            // Listen to real online peers from Firestore
-            cloudPeerJob?.cancel()
-            cloudPeerJob = launch {
-                databaseManager.observeOnlineCloudPeers(profile.userId).collect { peers ->
-                    synchronized(cloudPeersMap) {
-                        cloudPeersMap.clear()
-                        peers.forEach { peer ->
-                            cloudPeersMap[peer.spreDropId.lowercase()] = peer
-                        }
+    private fun startCloudListeners(profile: UserProfile) {
+        // Listen to real online peers from Firestore
+        cloudPeerJob?.cancel()
+        cloudPeerJob = signalingScope.launch {
+            databaseManager.observeOnlineCloudPeers(profile.userId).collect { peers ->
+                synchronized(cloudPeersMap) {
+                    cloudPeersMap.clear()
+                    peers.forEach { peer ->
+                        cloudPeersMap[peer.spreDropId.lowercase()] = peer
                     }
-                    combineAndPublishDiscoveredPeers()
                 }
+                combineAndPublishDiscoveredPeers()
             }
+        }
 
-            // Listen to real incoming transfer proposals from Firestore
-            cloudProposalJob?.cancel()
-            cloudProposalJob = launch {
-                databaseManager.observeIncomingTransferProposals(profile.userId, profile.spreDropId).collect { proposals ->
-                    proposals.forEach { proposal ->
-                        val existing = transferDao.getTransferById(proposal.transferId)
-                        if (existing == null) {
-                            transferDao.insertTransfer(proposal)
-                            TransferNotificationHelper.showIncomingTransferNotification(context, proposal)
-                            log("SIGNAL", "Real incoming transfer proposal from ${proposal.senderSpreDropId} for '${proposal.fileName}'")
-                        }
+        // Listen to real incoming transfer proposals from Firestore
+        cloudProposalJob?.cancel()
+        cloudProposalJob = signalingScope.launch {
+            databaseManager.observeIncomingTransferProposals(profile.userId, profile.spreDropId).collect { proposals ->
+                proposals.forEach { proposal ->
+                    val existing = transferDao.getTransferById(proposal.transferId)
+                    if (existing == null) {
+                        transferDao.insertTransfer(proposal)
+                        TransferNotificationHelper.showIncomingTransferNotification(context, proposal)
+                        log("SIGNAL", "Real incoming transfer proposal from ${proposal.senderSpreDropId} for '${proposal.fileName}'")
                     }
                 }
             }
+        }
 
-            // Listen to real incoming friend requests from Firestore
-            cloudFriendRequestJob?.cancel()
-            cloudFriendRequestJob = launch {
-                databaseManager.observeIncomingCloudFriendRequests(profile.spreDropId).collect { requests ->
-                    requests.forEach { req ->
-                        val existing = friendDao.getFriendById(req.fromUserId)
-                        if (existing == null || existing.status == FriendStatus.NONE) {
-                            val newFriend = Friend(
-                                userId = req.fromUserId,
-                                spreDropId = req.fromSpreDropId,
-                                displayName = req.fromDisplayName,
-                                avatarColorHex = req.fromAvatarColorHex,
-                                status = FriendStatus.REQUEST_RECEIVED,
-                                lastSeen = req.timestamp
-                            )
-                            friendDao.insertOrUpdateFriend(newFriend)
-                            log("SIGNAL", "New friend request received from ${req.fromSpreDropId} (${req.fromDisplayName})")
-                        }
+        // Listen to real incoming friend requests from Firestore
+        cloudFriendRequestJob?.cancel()
+        cloudFriendRequestJob = signalingScope.launch {
+            databaseManager.observeIncomingCloudFriendRequests(profile.spreDropId).collect { requests ->
+                requests.forEach { req ->
+                    val existing = friendDao.getFriendById(req.fromUserId)
+                    if (existing == null || existing.status == FriendStatus.NONE) {
+                        val newFriend = Friend(
+                            userId = req.fromUserId,
+                            spreDropId = req.fromSpreDropId,
+                            displayName = req.fromDisplayName,
+                            avatarColorHex = req.fromAvatarColorHex,
+                            status = FriendStatus.REQUEST_RECEIVED,
+                            lastSeen = req.timestamp
+                        )
+                        friendDao.insertOrUpdateFriend(newFriend)
+                        log("SIGNAL", "New friend request received from ${req.fromSpreDropId} (${req.fromDisplayName})")
                     }
                 }
             }
         }
     }
 
-    private fun startBleDiscovery() {
+    private fun startBleDiscovery(profile: UserProfile) {
+        val isVisible = profile.visibility != PrivacyMode.INVISIBLE && profile.availability != UserPresence.INVISIBLE && profile.availability != UserPresence.OFFLINE
+        if (isVisible) {
+            bleManager.startAdvertising(
+                spreDropId = profile.spreDropId,
+                displayName = profile.displayName,
+                userId = profile.userId
+            )
+        } else {
+            bleManager.stopAdvertising()
+        }
+        bleManager.startScanning()
         signalingScope.launch {
-            val profile = userDao.getUserProfileOnce()
-            if (profile != null && profile.visibility != PrivacyMode.INVISIBLE && profile.availability != UserPresence.INVISIBLE && profile.availability != UserPresence.OFFLINE) {
-                bleManager.startAdvertising(
-                    spreDropId = profile.spreDropId,
-                    displayName = profile.displayName,
-                    userId = profile.userId
-                )
-            } else {
-                bleManager.stopAdvertising()
-            }
-            bleManager.startScanning()
             log("DISCOVERY", "BLE Proximity Advertiser & Scanner initialized with SpreDrop Service UUID")
         }
     }
+
 
     private fun handleBlePeerDiscovered(peer: PeerDevice) {
         synchronized(blePeersMap) {

@@ -76,6 +76,7 @@ class SpreDropBleManager(
 
     @SuppressLint("MissingPermission")
     fun startAdvertising(spreDropId: String, displayName: String, userId: String) {
+        stopAdvertising()
         val adapter = bluetoothAdapter
         if (adapter == null || !adapter.isEnabled) {
             Log.w(TAG, "Bluetooth not enabled for BLE advertising")
@@ -125,6 +126,7 @@ class SpreDropBleManager(
 
     @SuppressLint("MissingPermission")
     fun startScanning() {
+        stopScanning()
         val adapter = bluetoothAdapter
         if (adapter == null || !adapter.isEnabled) {
             Log.w(TAG, "Bluetooth adapter unavailable for scanning")

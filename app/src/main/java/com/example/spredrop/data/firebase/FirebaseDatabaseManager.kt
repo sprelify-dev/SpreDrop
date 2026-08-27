@@ -35,7 +35,7 @@ data class CloudFriendRequest(
 
 class FirebaseDatabaseManager {
 
-    private val firestore: FirebaseFirestore? by lazy {
+    internal val firestore: FirebaseFirestore? by lazy {
         try {
             val app = com.google.firebase.FirebaseApp.getInstance()
             val instance = try {
@@ -55,7 +55,7 @@ class FirebaseDatabaseManager {
         }
     }
 
-    private val isConfigured: Boolean by lazy {
+    internal val isConfigured: Boolean by lazy {
         try {
             val key = firestore?.app?.options?.apiKey
             !key.isNullOrBlank() && !key.contains("Dummy", ignoreCase = true) && !key.contains("placeholder", ignoreCase = true)
