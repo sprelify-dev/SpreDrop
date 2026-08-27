@@ -37,7 +37,13 @@ class FirebaseDatabaseManager {
 
     private val firestore: FirebaseFirestore? by lazy {
         try {
-            val instance = FirebaseFirestore.getInstance()
+            val app = com.google.firebase.FirebaseApp.getInstance()
+            val instance = try {
+                FirebaseFirestore.getInstance(app, "spredrop")
+            } catch (e: Exception) {
+                Log.i("FirebaseDatabaseManager", "Failed to initialize custom database 'spredrop', falling back to default instance: ${e.message}")
+                FirebaseFirestore.getInstance()
+            }
             val settings = FirebaseFirestoreSettings.Builder()
                 .setPersistenceEnabled(true)
                 .build()
@@ -229,7 +235,7 @@ class FirebaseDatabaseManager {
                                 avatarColorHex = avatarHex,
                                 availability = avail,
                                 isFriend = false,
-                                connectionType = PeerConnectionType.LAN_WEBRTC,
+                                connectionType = PeerConnectionType.SIGNALING_SERVER,
                                 signalStrengthRssi = -48,
                                 ipAddress = "Cloud/P2P",
                                 lastDiscovered = lastSeen,

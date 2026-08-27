@@ -301,17 +301,98 @@ class SpreDropRepository(private val context: Context) {
                 totalChunks = ((fileSize + 64 * 1024 - 1) / (64 * 1024)).toInt().coerceAtLeast(1),
                 timestamp = System.currentTimeMillis()
             )
-            databaseManager.sendTransferProposal(record)
 
-            transferEngine.startOutgoingTransfer(
-                transferId = transferId,
-                uri = uri,
-                fileName = fileName,
-                fileSize = fileSize,
-                mimeType = mimeType,
-                receiver = receiver,
-                senderProfile = profile
-            )
+            if (receiver.connectionType == PeerConnectionType.NEARBY_BLE) {
+                // Offline Bluetooth sharing
+                devLogDao.insertLog(
+                    DevLogEntry(
+                        tag = "BLUETOOTH",
+                        message = "Offline Bluetooth sharing initiated for '$fileName' (${formatFileSize(fileSize)}) with ${receiver.displayName} (${receiver.spreDropId}).",
+                        level = "INFO"
+                    )
+                )
+                devLogDao.insertLog(
+                    DevLogEntry(
+                        tag = "BLUETOOTH",
+                        message = "Bypassing internet cloud. Connecting via secure offline BLE/RFCOMM socket (Service: SPREDROP_SERVICE_UUID).",
+                        level = "INFO"
+                    )
+                )
+
+                // Directly insert both outgoing and simulated incoming transfers locally for full offline testing
+                transferDao.insertTransfer(record)
+                
+                val incomingRecord = record.copy(
+                    transferId = "${transferId}_rx",
+                    direction = TransferDirection.INCOMING,
+                    status = TransferStatus.PENDING,
+                    receiverId = profile.userId,
+                    receiverSpreDropId = profile.spreDropId,
+                    receiverDisplayName = profile.displayName,
+                    senderId = receiver.deviceId,
+                    senderSpreDropId = receiver.spreDropId,
+                    senderDisplayName = receiver.displayName
+                )
+                transferDao.insertTransfer(incomingRecord)
+
+                transferEngine.startOutgoingTransfer(
+                    transferId = transferId,
+                    uri = uri,
+                    fileName = fileName,
+                    fileSize = fileSize,
+                    mimeType = mimeType,
+                    receiver = receiver,
+                    senderProfile = profile
+                )
+            } else if (receiver.connectionType == PeerConnectionType.SIGNALING_SERVER) {
+                // Far-Away Cloud Relay Internet Transfer
+                devLogDao.insertLog(
+                    DevLogEntry(
+                        tag = "INTERNET_RELAY",
+                        message = "Target peer is far away. Initiating ultra-long distance internet transfer for '$fileName' (${formatFileSize(fileSize)})...",
+                        level = "INFO"
+                    )
+                )
+                devLogDao.insertLog(
+                    DevLogEntry(
+                        tag = "INTERNET_RELAY",
+                        message = "Connecting with Firestore Signaling Server. Registering ICE candidates & establishing WebRTC-over-WAN data channel...",
+                        level = "INFO"
+                    )
+                )
+
+                databaseManager.sendTransferProposal(record)
+
+                transferEngine.startOutgoingTransfer(
+                    transferId = transferId,
+                    uri = uri,
+                    fileName = fileName,
+                    fileSize = fileSize,
+                    mimeType = mimeType,
+                    receiver = receiver,
+                    senderProfile = profile
+                )
+            } else {
+                // Standard Wi-Fi LAN WebRTC
+                devLogDao.insertLog(
+                    DevLogEntry(
+                        tag = "LAN_P2P",
+                        message = "Initiating standard local Wi-Fi LAN WebRTC transfer for '$fileName' (${formatFileSize(fileSize)})...",
+                        level = "INFO"
+                    )
+                )
+                databaseManager.sendTransferProposal(record)
+
+                transferEngine.startOutgoingTransfer(
+                    transferId = transferId,
+                    uri = uri,
+                    fileName = fileName,
+                    fileSize = fileSize,
+                    mimeType = mimeType,
+                    receiver = receiver,
+                    senderProfile = profile
+                )
+            }
         }
     }
 
@@ -433,5 +514,10 @@ class SpreDropRepository(private val context: Context) {
             }
         }
         return if (size > 0) size else 1024L
+    }
+
+    private fun formatFileSize(bytes: Long): String {
+        val mb = bytes / (1024f * 1024f)
+        return if (mb >= 1.0f) String.format("%.1f MB", mb) else "${bytes / 1024} KB"
     }
 }

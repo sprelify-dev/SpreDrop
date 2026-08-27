@@ -23,6 +23,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
@@ -50,6 +51,26 @@ fun SpreDropBrandLogo(
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         modifier = modifier
     ) {
+        val infiniteTransition = rememberInfiniteTransition(label = "logo_anim")
+        val pulseScale by infiniteTransition.animateFloat(
+            initialValue = 0.90f,
+            targetValue = 1.08f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(1500, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "pulse"
+        )
+        val rotationWiggle by infiniteTransition.animateFloat(
+            initialValue = -10f,
+            targetValue = 10f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(2200, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "wiggle"
+        )
+
         Box(
             contentAlignment = Alignment.Center,
             modifier = Modifier
@@ -66,12 +87,69 @@ fun SpreDropBrandLogo(
                 )
                 .border(1.5.dp, Color.White.copy(alpha = 0.35f), RoundedCornerShape((sizeDp * 0.28).dp))
         ) {
-            Icon(
-                imageVector = Icons.Default.Bolt,
-                contentDescription = "SpreDrop Logo",
-                tint = Color.White,
-                modifier = Modifier.size((sizeDp * 0.62).dp)
-            )
+            Canvas(
+                modifier = Modifier
+                    .size((sizeDp * 0.62f).dp)
+                    .graphicsLayer(
+                        scaleX = pulseScale,
+                        scaleY = pulseScale,
+                        rotationZ = rotationWiggle
+                    )
+            ) {
+                val w = size.width
+                val h = size.height
+                
+                val sPath = Path().apply {
+                    // Top loop right start
+                    moveTo(w * 0.78f, h * 0.24f)
+                    // Top loop back to left
+                    cubicTo(
+                        w * 0.78f, h * 0.08f,
+                        w * 0.22f, h * 0.08f,
+                        w * 0.22f, h * 0.36f
+                    )
+                    // Flowing downward middle connection
+                    cubicTo(
+                        w * 0.22f, h * 0.58f,
+                        w * 0.78f, h * 0.42f,
+                        w * 0.78f, h * 0.64f
+                    )
+                    // Bottom loop to left-end
+                    cubicTo(
+                        w * 0.78f, h * 0.92f,
+                        w * 0.22f, h * 0.92f,
+                        w * 0.22f, h * 0.76f
+                    )
+                }
+                
+                // Outer subtle white glow
+                drawPath(
+                    path = sPath,
+                    color = Color.White.copy(alpha = 0.25f),
+                    style = Stroke(
+                        width = w * 0.24f,
+                        cap = StrokeCap.Round,
+                        join = androidx.compose.ui.graphics.StrokeJoin.Round
+                    )
+                )
+                
+                // Dynamic inner white stroke
+                drawPath(
+                    path = sPath,
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            Color.White,
+                            Color(0xFFE0F7FA),
+                            Color(0xFF80DEEA)
+                        )
+                    ),
+                    style = Stroke(
+                        width = w * 0.16f,
+                        cap = StrokeCap.Round,
+                        join = androidx.compose.ui.graphics.StrokeJoin.Round
+                    )
+                )
+            }
         }
 
         if (showText) {

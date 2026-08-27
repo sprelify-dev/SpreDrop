@@ -1,3 +1,4 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 package com.example.spredrop.ui.screens
 
 import android.Manifest
@@ -43,6 +44,13 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.annotation.OptIn
+import androidx.camera.core.ExperimentalGetImage
+import androidx.camera.core.ImageAnalysis
+import com.google.mlkit.vision.barcode.BarcodeScanning
+import com.google.mlkit.vision.common.InputImage
+import android.net.Uri
+import android.provider.Settings
 import com.example.spredrop.model.UserProfile
 import com.example.spredrop.security.QrCodeGenerator
 import com.example.spredrop.ui.SpreDropViewModel
@@ -267,6 +275,7 @@ fun MyQrCodeTab(
     }
 }
 
+@OptIn(ExperimentalGetImage::class)
 @Composable
 fun ScanQrCodeTab(
     onCodeScanned: (String) -> Unit
@@ -281,10 +290,13 @@ fun ScanQrCodeTab(
         )
     }
 
+    var permissionDeniedByUser by remember { mutableStateOf(false) }
+
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
         hasCameraPermission = granted
+        permissionDeniedByUser = !granted
     }
 
     Column(
@@ -335,13 +347,45 @@ fun ScanQrCodeTab(
                                 val preview = Preview.Builder().build().also {
                                     it.surfaceProvider = previewView.surfaceProvider
                                 }
+
+                                val imageAnalysis = ImageAnalysis.Builder()
+                                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                                    .build()
+
+                                imageAnalysis.setAnalyzer(ContextCompat.getMainExecutor(ctx)) { imageProxy ->
+                                    val mediaImage = imageProxy.image
+                                    if (mediaImage != null) {
+                                        val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
+                                        val scanner = BarcodeScanning.getClient()
+                                        scanner.process(image)
+                                            .addOnSuccessListener { barcodes ->
+                                                for (barcode in barcodes) {
+                                                    val rawValue = barcode.rawValue
+                                                    if (!rawValue.isNullOrBlank()) {
+                                                        onCodeScanned(rawValue)
+                                                        break
+                                                    }
+                                                }
+                                            }
+                                            .addOnFailureListener { exc ->
+                                                Log.e("QrScanner", "Barcode scan failure", exc)
+                                            }
+                                            .addOnCompleteListener {
+                                                imageProxy.close()
+                                            }
+                                    } else {
+                                        imageProxy.close()
+                                    }
+                                }
+
                                 val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
 
                                 cameraProvider.unbindAll()
                                 cameraProvider.bindToLifecycle(
                                     lifecycleOwner,
                                     cameraSelector,
-                                    preview
+                                    preview,
+                                    imageAnalysis
                                 )
                             } catch (exc: Exception) {
                                 Log.e("QrScanner", "Use case binding failed", exc)
@@ -391,33 +435,57 @@ fun ScanQrCodeTab(
                     modifier = Modifier.padding(18.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.Default.CameraAlt,
+                        imageVector = if (permissionDeniedByUser) Icons.Default.CameraEnhance else Icons.Default.CameraAlt,
                         contentDescription = null,
-                        tint = SpreTealPrimary,
+                        tint = if (permissionDeniedByUser) MaterialTheme.colorScheme.error else SpreTealPrimary,
                         modifier = Modifier.size(48.dp)
                     )
                     Spacer(modifier = Modifier.height(10.dp))
                     Text(
-                        text = "Camera Permission Required",
-                        color = Color.White,
+                        text = if (permissionDeniedByUser) "Camera Access Blocked" else "Camera Permission Required",
+                        color = if (permissionDeniedByUser) MaterialTheme.colorScheme.error else Color.White,
                         fontWeight = FontWeight.Bold,
                         fontSize = 14.sp
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "Enable camera access to scan QR codes instantly.",
+                        text = if (permissionDeniedByUser) {
+                            "To respect your decision, we won't show system permission requests anymore. If you want to use the scanner, enable camera access in app settings."
+                        } else {
+                            "Enable camera access to scan QR codes instantly."
+                        },
                         color = SpreDarkTextMuted,
                         fontSize = 11.sp,
                         textAlign = TextAlign.Center
                     )
                     Spacer(modifier = Modifier.height(14.dp))
-                    Button(
-                        onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) },
-                        colors = ButtonDefaults.buttonColors(containerColor = SpreTealPrimary),
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.testTag("grant_camera_permission_button")
-                    ) {
-                        Text("Open Camera", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    if (permissionDeniedByUser) {
+                        Button(
+                            onClick = {
+                                try {
+                                    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                        data = Uri.fromParts("package", context.packageName, null)
+                                    }
+                                    context.startActivity(intent)
+                                } catch (e: Exception) {
+                                    Log.e("QrScanner", "Could not open app settings", e)
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.testTag("open_settings_permission_button")
+                        ) {
+                            Text("Open App Settings", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    } else {
+                        Button(
+                            onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) },
+                            colors = ButtonDefaults.buttonColors(containerColor = SpreTealPrimary),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.testTag("grant_camera_permission_button")
+                        ) {
+                            Text("Open Camera", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
             }

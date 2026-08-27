@@ -440,21 +440,7 @@ fun AuthScreen(
                         )
                     }
 
-                    Spacer(Modifier.height(4.dp))
-
-                    TextButton(
-                        onClick = { showFirebaseSetupDialog = true },
-                        contentPadding = PaddingValues(0.dp)
-                    ) {
-                        Icon(Icons.Default.CloudQueue, contentDescription = null, tint = SpreTealPrimary, modifier = Modifier.size(14.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text(
-                            text = "Firebase Cloud & Database Settings",
-                            fontSize = 11.sp,
-                            color = SpreTealPrimary,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
+                    // Settings link removed for pristine unified brand appearance
                 }
             }
         }

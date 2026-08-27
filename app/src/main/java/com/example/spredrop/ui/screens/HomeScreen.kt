@@ -48,16 +48,42 @@ fun HomeScreen(
     val isDiscovering by viewModel.isDiscovering.collectAsState()
     val isOnline by viewModel.isOnline.collectAsState()
 
+    val context = androidx.compose.ui.platform.LocalContext.current
     var targetPeerForFilePick by remember { mutableStateOf<PeerDevice?>(null) }
     var showPresenceDialog by remember { mutableStateOf(false) }
+
+    var pickedFileUri by remember { mutableStateOf<Uri?>(null) }
+    var pickedFileName by remember { mutableStateOf<String?>(null) }
+    var pickedFileSize by remember { mutableStateOf<Long?>(null) }
 
     // System File/Media Picker
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
-        if (uri != null && targetPeerForFilePick != null) {
-            viewModel.sendFileToPeer(uri, targetPeerForFilePick!!)
-            targetPeerForFilePick = null
+        if (uri != null) {
+            if (targetPeerForFilePick != null) {
+                viewModel.sendFileToPeer(uri, targetPeerForFilePick!!)
+                targetPeerForFilePick = null
+            } else {
+                pickedFileUri = uri
+                var name = "selected_file"
+                var size = 0L
+                try {
+                    val cursor = context.contentResolver.query(uri, null, null, null, null)
+                    cursor?.use {
+                        if (it.moveToFirst()) {
+                            val nameIdx = it.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                            if (nameIdx != -1) name = it.getString(nameIdx)
+                            val sizeIdx = it.getColumnIndex(android.provider.OpenableColumns.SIZE)
+                            if (sizeIdx != -1) size = it.getLong(sizeIdx)
+                        }
+                    }
+                } catch (e: Exception) {
+                    // ignore
+                }
+                pickedFileName = name
+                pickedFileSize = if (size > 0L) size else 1024L
+            }
         }
     }
 
@@ -84,17 +110,13 @@ fun HomeScreen(
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 onClick = {
-                    if (discoveredPeers.isNotEmpty()) {
-                        targetPeerForFilePick = discoveredPeers.first()
-                        filePickerLauncher.launch("*/*")
-                    } else {
-                        onNavigateToQrPair()
-                    }
+                    targetPeerForFilePick = null
+                    filePickerLauncher.launch("*/*")
                 },
                 containerColor = SpreTealPrimary,
                 contentColor = Color.White,
-                icon = { Icon(Icons.Default.Send, contentDescription = null) },
-                text = { Text("Send File", fontWeight = FontWeight.Bold) },
+                icon = { Icon(Icons.Default.UploadFile, contentDescription = null) },
+                text = { Text("Select File First", fontWeight = FontWeight.Bold) },
                 modifier = Modifier.testTag("fab_send_file")
             )
         },
@@ -118,6 +140,111 @@ fun HomeScreen(
                     onPresenceClick = { showPresenceDialog = true },
                     onQrClick = onNavigateToQrPair
                 )
+            }
+
+            // Ready to Send Selected File Banner
+            if (pickedFileUri != null) {
+                item {
+                    Surface(
+                        color = SpreTealPrimary.copy(alpha = 0.12f),
+                        shape = RoundedCornerShape(20.dp),
+                        border = androidx.compose.foundation.BorderStroke(2.dp, SpreTealPrimary),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Box(
+                                        contentAlignment = Alignment.Center,
+                                        modifier = Modifier
+                                            .size(40.dp)
+                                            .clip(CircleShape)
+                                            .background(SpreTealPrimary.copy(alpha = 0.25f))
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.FilePresent,
+                                            contentDescription = null,
+                                            tint = SpreTealPrimary,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                    }
+                                    
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = "Ready to Transfer File",
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = SpreTealPrimary
+                                        )
+                                        Text(
+                                            text = pickedFileName ?: "selected_file",
+                                            fontWeight = FontWeight.SemiBold,
+                                            fontSize = 14.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Text(
+                                            text = pickedFileSize?.let { formatFileSize(it) } ?: "Unknown size",
+                                            fontSize = 11.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                                
+                                IconButton(
+                                    onClick = {
+                                        pickedFileUri = null
+                                        pickedFileName = null
+                                        pickedFileSize = null
+                                    },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Clear Selection",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                            
+                            Spacer(modifier = Modifier.height(12.dp))
+                            
+                            Surface(
+                                color = SpreTealPrimary,
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center,
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.TouchApp,
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "Tap any Friend or Nearby Device below to send!",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             // 2. Pending or Active Transfer Requests
@@ -197,8 +324,15 @@ fun HomeScreen(
                     DiscoveredPeerCard(
                         peer = peer,
                         onSendFile = {
-                            targetPeerForFilePick = peer
-                            filePickerLauncher.launch("*/*")
+                            if (pickedFileUri != null) {
+                                viewModel.sendFileToPeer(pickedFileUri!!, peer)
+                                pickedFileUri = null
+                                pickedFileName = null
+                                pickedFileSize = null
+                            } else {
+                                targetPeerForFilePick = peer
+                                filePickerLauncher.launch("*/*")
+                            }
                         },
                         onAddFriend = {
                             viewModel.sendFriendRequest(peer.spreDropId, peer.displayName)
@@ -244,8 +378,15 @@ fun HomeScreen(
                                         availability = friend.availability,
                                         isFriend = true
                                     )
-                                    targetPeerForFilePick = peer
-                                    filePickerLauncher.launch("*/*")
+                                    if (pickedFileUri != null) {
+                                        viewModel.sendFileToPeer(pickedFileUri!!, peer)
+                                        pickedFileUri = null
+                                        pickedFileName = null
+                                        pickedFileSize = null
+                                    } else {
+                                        targetPeerForFilePick = peer
+                                        filePickerLauncher.launch("*/*")
+                                    }
                                 }
                             )
                         }
@@ -539,12 +680,43 @@ fun ActiveTransferCard(
 }
 
 @Composable
+fun getDistanceInfo(rssi: Int): Triple<Int, String, Color> {
+    val percentage = when {
+        rssi >= -50 -> {
+            // green range: mapped to under 20% near range (e.g. 10% to 20%)
+            val ratio = (rssi - (-50)).toFloat() / ((-40) - (-50)) // 0..1
+            (20 - (ratio * 10)).toInt().coerceIn(10, 20)
+        }
+        rssi >= -75 -> {
+            // orange range: mapped to medium range (e.g. 21% to 60%)
+            val ratio = (rssi - (-75)).toFloat() / ((-51) - (-75)) // 0..1
+            (60 - (ratio * 39)).toInt().coerceIn(21, 60)
+        }
+        else -> {
+            // red range: mapped to end of range (e.g. 61% to 98%)
+            val ratio = (rssi - (-100)).toFloat() / ((-76) - (-100)) // 0..1
+            (98 - (ratio * 37)).toInt().coerceIn(61, 98)
+        }
+    }
+    
+    val (label, color) = when {
+        percentage <= 20 -> Pair("Near (Under 20%)", Color(0xFF10B981)) // Green
+        percentage <= 60 -> Pair("Medium Distance (60%)", Color(0xFFF59E0B)) // Orange
+        else -> Pair("Far Range (>60%)", Color(0xFFEF4444)) // Red
+    }
+    
+    return Triple(percentage, label, color)
+}
+
+@Composable
 fun DiscoveredPeerCard(
     peer: PeerDevice,
     onSendFile: () -> Unit,
     onAddFriend: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val (percentage, distanceLabel, distanceColor) = getDistanceInfo(peer.signalStrengthRssi)
+
     Surface(
         color = MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(16.dp),
@@ -552,98 +724,154 @@ fun DiscoveredPeerCard(
         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.surfaceVariant),
         modifier = modifier.fillMaxWidth()
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(14.dp)
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth()
             ) {
-                UserAvatar(
-                    name = peer.displayName,
-                    spreDropId = peer.spreDropId,
-                    presence = peer.availability,
-                    colorHex = peer.avatarColorHex,
-                    sizeDp = 46
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    UserAvatar(
+                        name = peer.displayName,
+                        spreDropId = peer.spreDropId,
+                        presence = peer.availability,
+                        colorHex = peer.avatarColorHex,
+                        sizeDp = 46
+                    )
 
-                Column {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                text = peer.displayName,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            if (peer.isFriend) {
+                                Icon(
+                                    imageVector = Icons.Default.Star,
+                                    contentDescription = "Friend",
+                                    tint = SpreAwayYellow,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
+                        }
                         Text(
-                            text = peer.displayName,
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Bold
+                            text = peer.spreDropId,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = SpreTealPrimary,
+                            fontWeight = FontWeight.SemiBold
                         )
-                        if (peer.isFriend) {
-                            Icon(
-                                imageVector = Icons.Default.Star,
-                                contentDescription = "Friend",
-                                tint = SpreAwayYellow,
-                                modifier = Modifier.size(14.dp)
+                        
+                        Spacer(modifier = Modifier.height(2.dp))
+                        
+                        // Proximity Color Indicator
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(distanceColor)
+                            )
+                            Text(
+                                text = "Proximity: ",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = distanceLabel,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = distanceColor
                             )
                         }
                     }
-                    Text(
-                        text = peer.spreDropId,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = SpreTealPrimary,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                }
+
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (!peer.isFriend) {
+                        IconButton(
+                            onClick = onAddFriend,
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PersonAdd,
+                                contentDescription = "Add Friend",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+
+                    Button(
+                        onClick = onSendFile,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = SpreTealPrimary,
+                            contentColor = Color.White
+                        ),
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.testTag("send_file_to_${peer.spreDropId}")
                     ) {
-                        Text(
-                            text = peer.connectionType.name.replace("_", " "),
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        Icon(
+                            imageVector = Icons.Default.Send,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
                         )
-                        Text(
-                            text = "(${peer.signalStrengthRssi} dBm)",
-                            fontSize = 10.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
-                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Send", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
-
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (!peer.isFriend) {
-                    IconButton(
-                        onClick = onAddFriend,
-                        modifier = Modifier.size(36.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.PersonAdd,
-                            contentDescription = "Add Friend",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                }
-
-                Button(
-                    onClick = onSendFile,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = SpreTealPrimary,
-                        contentColor = Color.White
-                    ),
-                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
-                    shape = RoundedCornerShape(10.dp),
-                    modifier = Modifier.testTag("send_file_to_${peer.spreDropId}")
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            // Proximity Progress Bar (hiding underlying technology, fully private/secure)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)
+            ) {
+                Text(
+                    text = "SpreDrop App Link",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                )
+                
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(6.dp)
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Send,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .fillMaxWidth(fraction = percentage.toFloat() / 100f)
+                            .background(distanceColor)
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Send", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                 }
+                
+                Text(
+                    text = "$percentage%",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = distanceColor
+                )
             }
         }
     }

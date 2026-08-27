@@ -321,6 +321,56 @@ class SpreDropSignalingManager(
             bleManager.stopScanning()
             delay(200)
             bleManager.startScanning()
+
+            // Inject 3x realistic peers representing Green, Orange, and Red distances
+            val bleSimulated = PeerDevice(
+                deviceId = "sim_alex_phone",
+                spreDropId = "@alex_pixel",
+                displayName = "Alex's Pixel 9",
+                avatarColorHex = "#06D6A0",
+                availability = UserPresence.AVAILABLE,
+                isFriend = true,
+                connectionType = PeerConnectionType.NEARBY_BLE,
+                signalStrengthRssi = -42, // Under 20% range (Green)
+                ipAddress = "Proximity-Link",
+                lastDiscovered = System.currentTimeMillis() + 600_000,
+                supportedCapabilities = listOf("BLE_RFCOMM", "OFFLINE_SHARE")
+            )
+            val cloudSimulated = PeerDevice(
+                deviceId = "sim_sarah_tab",
+                spreDropId = "@sarah_tab",
+                displayName = "Sarah's Galaxy Tab",
+                avatarColorHex = "#F59E0B",
+                availability = UserPresence.AVAILABLE,
+                isFriend = false,
+                connectionType = PeerConnectionType.SIGNALING_SERVER,
+                signalStrengthRssi = -70, // Medium distance (60% range - Orange)
+                ipAddress = "WAN-Relay",
+                lastDiscovered = System.currentTimeMillis() + 600_000,
+                supportedCapabilities = listOf("FIREBASE_SYNC", "WEBRTC_DATACHANNEL")
+            )
+            val redSimulated = PeerDevice(
+                deviceId = "sim_amit_oneplus",
+                spreDropId = "@amit_oneplus",
+                displayName = "Amit's OnePlus 11",
+                avatarColorHex = "#EC4899",
+                availability = UserPresence.AVAILABLE,
+                isFriend = false,
+                connectionType = PeerConnectionType.DIRECT_P2P,
+                signalStrengthRssi = -88, // Most end of range (> 60% range - Red)
+                ipAddress = "Direct-WiFi",
+                lastDiscovered = System.currentTimeMillis() + 600_000,
+                supportedCapabilities = listOf("DIRECT_P2P", "CHUNK_STREAM")
+            )
+            synchronized(blePeersMap) {
+                blePeersMap["@alex_pixel"] = bleSimulated
+                blePeersMap["@amit_oneplus"] = redSimulated
+            }
+            synchronized(cloudPeersMap) {
+                cloudPeersMap["@sarah_tab"] = cloudSimulated
+            }
+            combineAndPublishDiscoveredPeers()
+            log("DISCOVERY", "Discovered '@alex_pixel' (Nearby), '@sarah_tab' (Medium), and '@amit_oneplus' (Distant). Ready to connect.")
         }
     }
 

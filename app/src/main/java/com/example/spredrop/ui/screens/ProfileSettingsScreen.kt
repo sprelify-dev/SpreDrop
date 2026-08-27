@@ -22,6 +22,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.style.TextOverflow
 import com.example.spredrop.data.firebase.AuthState
 import com.example.spredrop.data.firebase.FirestoreConnectionState
 import com.example.spredrop.model.*
@@ -49,14 +50,6 @@ fun ProfileSettingsScreen(
     var showEditProfileDialog by remember { mutableStateOf(false) }
     var showLogsDialog by remember { mutableStateOf(false) }
     var showAuthDialog by remember { mutableStateOf(false) }
-    var showFirebaseSetupDialog by remember { mutableStateOf(false) }
-
-    if (showFirebaseSetupDialog) {
-        com.example.spredrop.ui.components.FirebaseSetupDialog(
-            viewModel = viewModel,
-            onDismiss = { showFirebaseSetupDialog = false }
-        )
-    }
 
     if (showAuthDialog) {
         FirebaseAuthDialog(
@@ -163,10 +156,11 @@ fun ProfileSettingsScreen(
                 }
             }
 
-            // Firebase Authentication & Cloud Database Section
+            // SpreDrop Cloud Sync Section
+            val firebaseUser = (authState as? AuthState.Authenticated)?.user
             item {
                 Text(
-                    text = "Firebase Cloud & Database",
+                    text = "SpreDrop Cloud Sync",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
@@ -208,40 +202,14 @@ fun ProfileSettingsScreen(
 
                                 Column {
                                     Text(
-                                        text = "Project: spredrop",
+                                        text = "Sync Status",
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 15.sp
                                     )
                                     Text(
-                                        text = "ID: spredrop • #947368133167",
+                                        text = if (firebaseUser != null) "Connected & Synchronized" else "Offline-only Mode",
                                         fontSize = 11.sp,
-                                        fontFamily = FontFamily.Monospace,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-
-                            // Connection Badge
-                            Surface(
-                                color = SpreTealPrimary.copy(alpha = 0.15f),
-                                shape = RoundedCornerShape(8.dp)
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(6.dp)
-                                            .clip(CircleShape)
-                                            .background(SpreTealPrimary)
-                                    )
-                                    Spacer(Modifier.width(4.dp))
-                                    Text(
-                                        text = "Firestore Active",
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = SpreTealPrimary
                                     )
                                 }
                             }
@@ -249,24 +217,23 @@ fun ProfileSettingsScreen(
 
                         HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
 
-                        // Auth User Info
-                        val firebaseUser = (authState as? AuthState.Authenticated)?.user
                         if (firebaseUser != null) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                Column {
+                                Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = firebaseUser.email ?: firebaseUser.displayName ?: "Authenticated User",
+                                        text = firebaseUser.email ?: firebaseUser.displayName ?: "SpreDrop Account",
                                         fontWeight = FontWeight.SemiBold,
-                                        fontSize = 14.sp
+                                        fontSize = 14.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                     Text(
-                                        text = "UID: ${firebaseUser.uid.take(12)}...",
+                                        text = "Cloud backup and friends sync enabled",
                                         fontSize = 11.sp,
-                                        fontFamily = FontFamily.Monospace,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
@@ -275,7 +242,7 @@ fun ProfileSettingsScreen(
                                     onClick = { viewModel.signOut() },
                                     colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                                 ) {
-                                    Text("Sign Out", fontSize = 13.sp)
+                                    Text("Disconnect", fontSize = 13.sp)
                                 }
                             }
                         } else {
@@ -285,43 +252,26 @@ fun ProfileSettingsScreen(
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Column {
-                                    Text("Not signed in to Cloud Auth", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                                    Text("Sign in to sync friends & profile across devices", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text("Local Account Only", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                                    Text("Sign in to sync friends & profile securely", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                             }
                         }
 
-                        // Buttons row
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            modifier = Modifier.fillMaxWidth()
+                        Button(
+                            onClick = { showAuthDialog = true },
+                            colors = ButtonDefaults.buttonColors(containerColor = SpreTealPrimary),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth().testTag("manage_firebase_auth_button")
                         ) {
-                            Button(
-                                onClick = { showAuthDialog = true },
-                                colors = ButtonDefaults.buttonColors(containerColor = SpreTealPrimary),
-                                shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier.weight(1f).testTag("manage_firebase_auth_button")
-                            ) {
-                                Icon(Icons.Default.AccountCircle, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color(0xFF0F172A))
-                                Spacer(Modifier.width(6.dp))
-                                Text(
-                                    text = if (firebaseUser != null) "Manage Auth" else "Sign In / Register",
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF0F172A)
-                                )
-                            }
-
-                            OutlinedButton(
-                                onClick = { showFirebaseSetupDialog = true },
-                                shape = RoundedCornerShape(12.dp),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, SpreTealPrimary.copy(alpha = 0.6f)),
-                                modifier = Modifier.weight(1f).testTag("configure_firebase_button")
-                            ) {
-                                Icon(Icons.Default.Settings, contentDescription = null, modifier = Modifier.size(16.dp), tint = SpreTealPrimary)
-                                Spacer(Modifier.width(6.dp))
-                                Text("Configure Cloud", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface)
-                            }
+                            Icon(Icons.Default.AccountCircle, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color(0xFF0F172A))
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                text = if (firebaseUser != null) "Manage Account" else "Sign In / Register",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF0F172A)
+                            )
                         }
                     }
                 }
