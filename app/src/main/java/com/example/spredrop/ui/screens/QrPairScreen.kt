@@ -52,6 +52,7 @@ import com.google.mlkit.vision.common.InputImage
 import android.net.Uri
 import android.provider.Settings
 import com.example.spredrop.model.UserProfile
+import com.example.spredrop.model.UserPresence
 import com.example.spredrop.security.QrCodeGenerator
 import com.example.spredrop.ui.SpreDropViewModel
 import com.example.spredrop.ui.components.AnimatedCameraLaserScanner
@@ -70,6 +71,141 @@ fun QrPairScreen(
 
     var selectedTabIndex by remember { mutableIntStateOf(0) }
     val tabs = listOf("My QR Code", "Scan QR")
+
+    var scannedPeerResult by remember { mutableStateOf<com.example.spredrop.security.ParsedPairData?>(null) }
+    var showScanResultDialog by remember { mutableStateOf(false) }
+    var targetPeerForFilePick by remember { mutableStateOf<com.example.spredrop.model.PeerDevice?>(null) }
+
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: android.net.Uri? ->
+        if (uri != null && targetPeerForFilePick != null) {
+            viewModel.sendFileToPeer(uri, targetPeerForFilePick!!)
+            targetPeerForFilePick = null
+        }
+    }
+
+    if (showScanResultDialog && scannedPeerResult != null) {
+        val result = scannedPeerResult!!
+        AlertDialog(
+            onDismissRequest = { showScanResultDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.QrCodeScanner,
+                        contentDescription = null,
+                        tint = SpreTealPrimary,
+                        modifier = Modifier.size(28.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "SpreDrop Connect",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                    Text(
+                        text = "You successfully paired with:",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(16.dp)
+                        ) {
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .background(SpreTealPrimary, CircleShape)
+                            ) {
+                                Text(
+                                    text = result.displayName.take(1).uppercase(),
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Column {
+                                Text(
+                                    text = result.displayName,
+                                    fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = result.spreDropId,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "Initiate a high-speed direct peer-to-peer file transfer or add them as a friend.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        targetPeerForFilePick = com.example.spredrop.model.PeerDevice(
+                            deviceId = result.userId,
+                            spreDropId = result.spreDropId,
+                            displayName = result.displayName,
+                            avatarColorHex = "#00B4D8",
+                            availability = UserPresence.AVAILABLE,
+                            isFriend = true,
+                            connectionType = com.example.spredrop.model.PeerConnectionType.DIRECT_P2P,
+                            signalStrengthRssi = -30,
+                            ipAddress = "Direct/QR"
+                        )
+                        showScanResultDialog = false
+                        filePickerLauncher.launch("*/*")
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = SpreTealPrimary)
+                ) {
+                    Icon(imageVector = Icons.Default.Send, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Send File")
+                }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(
+                        onClick = {
+                            viewModel.sendFriendRequest(result.spreDropId, result.displayName)
+                            showScanResultDialog = false
+                        }
+                    ) {
+                        Icon(imageVector = Icons.Default.PersonAdd, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Add Friend")
+                    }
+                    TextButton(
+                        onClick = { showScanResultDialog = false }
+                    ) {
+                        Text("Cancel")
+                    }
+                }
+            }
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -137,6 +273,11 @@ fun QrPairScreen(
                 )
                 1 -> ScanQrCodeTab(
                     onCodeScanned = { payload ->
+                        val parsed = QrCodeGenerator.parsePairUri(payload)
+                        if (parsed != null) {
+                            scannedPeerResult = parsed
+                            showScanResultDialog = true
+                        }
                         viewModel.handleScannedQr(payload)
                     }
                 )

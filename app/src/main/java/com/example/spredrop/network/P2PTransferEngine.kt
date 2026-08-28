@@ -125,6 +125,7 @@ class P2PTransferEngine(
                 } else {
                     // Fallback to auto-accept if Firestore is not configured/offline
                     delay(1000)
+                    proposalAccepted = true
                 }
 
                 transferDao.updateStatus(transferId, TransferStatus.TRANSFERRING)

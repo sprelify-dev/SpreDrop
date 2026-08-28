@@ -11,6 +11,8 @@ import com.example.spredrop.data.firebase.FirebaseConfig
 import com.example.spredrop.data.firebase.FirestoreConnectionState
 import com.example.spredrop.model.*
 import com.example.spredrop.security.QrCodeGenerator
+import android.net.wifi.p2p.WifiP2pDevice
+import android.net.wifi.p2p.WifiP2pInfo
 import com.google.firebase.auth.FirebaseUser
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -18,6 +20,12 @@ import kotlinx.coroutines.launch
 class SpreDropViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository = SpreDropRepository(application)
+
+    // Wi-Fi P2P direct connectivity fields
+    val isWifiP2pEnabled: StateFlow<Boolean> = repository.wifiP2pManager.isP2pEnabled
+    val wifiP2pPeers: StateFlow<List<WifiP2pDevice>> = repository.wifiP2pManager.peersList
+    val wifiP2pConnectionInfo: StateFlow<WifiP2pInfo?> = repository.wifiP2pManager.connectionInfo
+    val wifiP2pThisDevice: StateFlow<WifiP2pDevice?> = repository.wifiP2pManager.thisDevice
 
     val userProfile: StateFlow<UserProfile?> = repository.userProfile
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
@@ -123,6 +131,76 @@ class SpreDropViewModel(application: Application) : AndroidViewModel(application
             repository.updateProfileIdentity(spreDropId, displayName)
             _userMessage.value = "Profile identity updated to $spreDropId"
         }
+    }
+
+    fun registerWifiP2p() {
+        repository.wifiP2pManager.register()
+    }
+
+    fun unregisterWifiP2p() {
+        repository.wifiP2pManager.unregister()
+    }
+
+    fun startWifiP2pDiscovery() {
+        repository.wifiP2pManager.startDiscovery(
+            onSuccess = { _userMessage.value = "Wi-Fi Direct scan started successfully" },
+            onFailure = { reason -> _userMessage.value = "Failed to start Wi-Fi Direct scan: error $reason" }
+        )
+    }
+
+    fun stopWifiP2pDiscovery() {
+        repository.wifiP2pManager.stopDiscovery(
+            onSuccess = { _userMessage.value = "Wi-Fi Direct scan stopped" },
+            onFailure = { reason -> _userMessage.value = "Failed to stop Wi-Fi Direct scan: error $reason" }
+        )
+    }
+
+    fun connectToWifiP2pPeer(deviceAddress: String) {
+        _userMessage.value = "Connecting to Wi-Fi Direct peer..."
+        repository.wifiP2pManager.connectToPeer(
+            deviceAddress = deviceAddress,
+            onSuccess = { _userMessage.value = "Wi-Fi Direct connection negotiation started" },
+            onFailure = { reason -> _userMessage.value = "Connection request failed: error $reason" }
+        )
+    }
+
+    fun disconnectWifiP2p() {
+        repository.wifiP2pManager.disconnect(
+            onSuccess = { _userMessage.value = "Disconnected from Wi-Fi Direct group" },
+            onFailure = { reason -> _userMessage.value = "Failed to disconnect: error $reason" }
+        )
+    }
+
+    fun startP2pSocketServer(onFileReceived: (String, Long, java.io.File) -> Unit) {
+        repository.wifiP2pManager.startP2pSocketServer(
+            onFileReceived = { fileName, fileSize, file ->
+                _userMessage.value = "Direct P2P File Received: $fileName (${fileSize} bytes)"
+                onFileReceived(fileName, fileSize, file)
+            },
+            onError = { err ->
+                _userMessage.value = "Local server error: $err"
+            }
+        )
+    }
+
+    fun stopP2pSocketServer() {
+        repository.wifiP2pManager.stopP2pSocketServer()
+    }
+
+    fun sendFileDirectly(uri: android.net.Uri, host: String, onProgress: (Long) -> Unit, onSuccess: () -> Unit) {
+        _userMessage.value = "Streaming file directly via P2P local highway..."
+        repository.wifiP2pManager.sendFileDirectly(
+            uri = uri,
+            host = host,
+            onProgress = onProgress,
+            onSuccess = {
+                _userMessage.value = "Direct P2P transfer completed successfully!"
+                onSuccess()
+            },
+            onFailure = { err ->
+                _userMessage.value = "Direct transfer failed: $err"
+            }
+        )
     }
 
     fun sendFriendRequest(targetSpreDropId: String, targetDisplayName: String = "") {

@@ -16,9 +16,11 @@ import com.example.spredrop.data.local.SpreDropDatabase
 import com.example.spredrop.model.*
 import com.example.spredrop.network.P2PTransferEngine
 import com.example.spredrop.network.SpreDropSignalingManager
+import com.example.spredrop.network.SpreDropWifiP2pManager
 import com.google.firebase.auth.FirebaseUser
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.io.File
@@ -42,6 +44,7 @@ class SpreDropRepository(private val context: Context) {
     val authManager = FirebaseAuthManager(context)
     val databaseManager = FirebaseDatabaseManager()
     val transferEngine = P2PTransferEngine(context, transferDao, devLogDao, databaseManager)
+    val wifiP2pManager = SpreDropWifiP2pManager(context)
 
     val signalingManager = SpreDropSignalingManager(
         context = context,

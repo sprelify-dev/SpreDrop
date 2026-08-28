@@ -383,6 +383,58 @@ class FirebaseDatabaseManager {
         }
     }
 
+    fun observeAcceptedCloudFriendRequests(mySpreDropId: String): Flow<List<CloudFriendRequest>> = callbackFlow {
+        val fs = firestore
+        if (fs == null || !isConfigured) {
+            trySend(emptyList())
+            awaitClose { }
+            return@callbackFlow
+        }
+        var registration: ListenerRegistration? = null
+        try {
+            registration = fs.collection("friend_requests")
+                .whereEqualTo("fromSpreDropId", mySpreDropId)
+                .whereEqualTo("status", "ACCEPTED")
+                .addSnapshotListener { snapshots, error ->
+                    if (error != null) {
+                        Log.e("FirebaseDatabaseManager", "Accepted requests listener error: ${error.message}")
+                        return@addSnapshotListener
+                    }
+                    if (snapshots != null) {
+                        val requests = snapshots.documents.mapNotNull { doc ->
+                            val id = doc.getString("id") ?: doc.id
+                            val fromUserId = doc.getString("fromUserId") ?: ""
+                            val fromSpreDropId = doc.getString("fromSpreDropId") ?: "@user"
+                            val fromDisplayName = doc.getString("fromDisplayName") ?: "User"
+                            val fromAvatarHex = doc.getString("fromAvatarColorHex") ?: "#00B4D8"
+                            val toSpreDropId = doc.getString("toSpreDropId") ?: ""
+                            val status = doc.getString("status") ?: "PENDING"
+                            val ts = doc.getLong("timestamp") ?: System.currentTimeMillis()
+
+                            CloudFriendRequest(
+                                id = id,
+                                fromUserId = fromUserId,
+                                fromSpreDropId = fromSpreDropId,
+                                fromDisplayName = fromDisplayName,
+                                fromAvatarColorHex = fromAvatarHex,
+                                toSpreDropId = toSpreDropId,
+                                status = status,
+                                timestamp = ts
+                            )
+                        }
+                        trySend(requests)
+                    }
+                }
+        } catch (e: Exception) {
+            Log.e("FirebaseDatabaseManager", "Error listening to accepted requests: ${e.message}")
+            trySend(emptyList())
+        }
+
+        awaitClose {
+            registration?.remove()
+        }
+    }
+
     suspend fun updateCloudFriendRequestStatus(requestId: String, status: String): Result<Unit> {
         val fs = firestore
         if (fs == null || !isConfigured) return Result.success(Unit)

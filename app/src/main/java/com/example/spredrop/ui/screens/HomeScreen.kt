@@ -48,6 +48,18 @@ fun HomeScreen(
     val isDiscovering by viewModel.isDiscovering.collectAsState()
     val isOnline by viewModel.isOnline.collectAsState()
 
+    val isWifiP2pEnabled by viewModel.isWifiP2pEnabled.collectAsState()
+    val wifiP2pPeers by viewModel.wifiP2pPeers.collectAsState()
+    val wifiP2pConnectionInfo by viewModel.wifiP2pConnectionInfo.collectAsState()
+    val wifiP2pThisDevice by viewModel.wifiP2pThisDevice.collectAsState()
+
+    DisposableEffect(Unit) {
+        viewModel.registerWifiP2p()
+        onDispose {
+            viewModel.unregisterWifiP2p()
+        }
+    }
+
     val context = androidx.compose.ui.platform.LocalContext.current
     var targetPeerForFilePick by remember { mutableStateOf<PeerDevice?>(null) }
     var showPresenceDialog by remember { mutableStateOf(false) }
@@ -140,6 +152,214 @@ fun HomeScreen(
                     onPresenceClick = { showPresenceDialog = true },
                     onQrClick = onNavigateToQrPair
                 )
+            }
+
+            // 1.5. Wi-Fi Direct Local Highway Card
+            item {
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    ),
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Wifi,
+                                    contentDescription = null,
+                                    tint = SpreTealPrimary,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Column {
+                                    Text(
+                                        text = "Wi-Fi Direct Highway",
+                                        fontWeight = FontWeight.Bold,
+                                        style = MaterialTheme.typography.titleMedium
+                                    )
+                                    Text(
+                                        text = if (isWifiP2pEnabled) "Status: Enabled" else "Status: Disabled/Turning On",
+                                        fontSize = 11.sp,
+                                        color = if (isWifiP2pEnabled) SpreTealPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Button(
+                                    onClick = { viewModel.startWifiP2pDiscovery() },
+                                    colors = ButtonDefaults.buttonColors(containerColor = SpreTealPrimary),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                    modifier = Modifier.height(32.dp)
+                                ) {
+                                    Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color.White)
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Scan", fontSize = 11.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                                }
+
+                                if (wifiP2pConnectionInfo?.groupFormed == true) {
+                                    Button(
+                                        onClick = { viewModel.disconnectWifiP2p() },
+                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                        modifier = Modifier.height(32.dp)
+                                    ) {
+                                        Text("Disconnect", fontSize = 11.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                        }
+
+                        // Local Device Info
+                        wifiP2pThisDevice?.let { dev ->
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "My P2P Device: ${dev.deviceName} (${dev.deviceAddress})",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        // Active Connection Status
+                        if (wifiP2pConnectionInfo?.groupFormed == true) {
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Surface(
+                                color = SpreTealPrimary.copy(alpha = 0.12f),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(10.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.CloudQueue,
+                                        contentDescription = null,
+                                        tint = SpreTealPrimary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Column {
+                                        Text(
+                                            text = "Isolated Network Established!",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = SpreTealPrimary
+                                        )
+                                        Text(
+                                            text = "GO: ${wifiP2pConnectionInfo?.groupOwnerAddress?.hostAddress ?: "Resolving..."} | Role: ${if (wifiP2pConnectionInfo?.isGroupOwner == true) "Group Owner (Server)" else "Client"}",
+                                            fontSize = 11.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+
+                            // Start direct server listener automatically if we are connected
+                            LaunchedEffect(wifiP2pConnectionInfo) {
+                                if (wifiP2pConnectionInfo?.isGroupOwner == true) {
+                                    viewModel.startP2pSocketServer { name, size, file ->
+                                        // Handle received file over Direct P2P!
+                                    }
+                                }
+                            }
+                        }
+
+                        // List Discovered Wifi Direct Peers
+                        if (wifiP2pPeers.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = "Available P2P Peers:",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(bottom = 6.dp)
+                            )
+                            Column(
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                wifiP2pPeers.forEach { p2pDevice ->
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(MaterialTheme.colorScheme.surface)
+                                            .padding(10.dp)
+                                    ) {
+                                        Column {
+                                            Text(
+                                                text = p2pDevice.deviceName,
+                                                fontWeight = FontWeight.SemiBold,
+                                                fontSize = 13.sp
+                                            )
+                                            Text(
+                                                text = "MAC: ${p2pDevice.deviceAddress}",
+                                                fontSize = 11.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Button(
+                                                onClick = {
+                                                    viewModel.connectToWifiP2pPeer(p2pDevice.deviceAddress)
+                                                },
+                                                colors = ButtonDefaults.buttonColors(containerColor = SpreTealPrimary),
+                                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                                modifier = Modifier.height(28.dp)
+                                            ) {
+                                                Text("Link", fontSize = 10.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                                            }
+
+                                            // Direct P2P File Sending button if a file is picked and we have connection info
+                                            if (pickedFileUri != null && wifiP2pConnectionInfo?.groupFormed == true) {
+                                                var transferProgress by remember { mutableStateOf(0L) }
+                                                IconButton(
+                                                    onClick = {
+                                                        val targetHost = wifiP2pConnectionInfo?.groupOwnerAddress?.hostAddress ?: "192.168.49.1"
+                                                        viewModel.sendFileDirectly(
+                                                            uri = pickedFileUri!!,
+                                                            host = targetHost,
+                                                            onProgress = { sent -> transferProgress = sent },
+                                                            onSuccess = {
+                                                                pickedFileUri = null
+                                                                pickedFileName = null
+                                                                pickedFileSize = null
+                                                            }
+                                                        )
+                                                    },
+                                                    modifier = Modifier.size(28.dp)
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Send,
+                                                        contentDescription = "Direct Stream Payload",
+                                                        tint = SpreCyanAccent,
+                                                        modifier = Modifier.size(18.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             // Ready to Send Selected File Banner

@@ -58,6 +58,7 @@ class SpreDropSignalingManager(
     private var cloudPeerJob: Job? = null
     private var cloudProposalJob: Job? = null
     private var cloudFriendRequestJob: Job? = null
+    private var cloudAcceptedRequestJob: Job? = null
 
     private val bleManager = SpreDropBleManager(context) { blePeer ->
         handleBlePeerDiscovered(blePeer)
@@ -209,6 +210,26 @@ class SpreDropSignalingManager(
                         )
                         friendDao.insertOrUpdateFriend(newFriend)
                         log("SIGNAL", "New friend request received from ${req.fromSpreDropId} (${req.fromDisplayName})")
+                    }
+                }
+            }
+        }
+
+        // Listen to real accepted friend requests from Firestore
+        cloudAcceptedRequestJob?.cancel()
+        cloudAcceptedRequestJob = signalingScope.launch {
+            databaseManager.observeAcceptedCloudFriendRequests(profile.spreDropId).collect { acceptedList ->
+                acceptedList.forEach { req ->
+                    val targetSpreDropId = req.toSpreDropId.lowercase().trim()
+                    val existing = friendDao.getFriendBySpreDropId(targetSpreDropId)
+                    if (existing != null && existing.status != FriendStatus.FRIENDS) {
+                        friendDao.updateFriendStatus(existing.userId, FriendStatus.FRIENDS)
+                        log("SIGNAL", "Friend request to $targetSpreDropId was ACCEPTED! You are now friends.")
+                        TransferNotificationHelper.showFriendRequestNotification(
+                            context,
+                            existing.displayName,
+                            existing.spreDropId
+                        )
                     }
                 }
             }
