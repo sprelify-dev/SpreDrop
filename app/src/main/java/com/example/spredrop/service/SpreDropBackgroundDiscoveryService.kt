@@ -62,27 +62,49 @@ class SpreDropBackgroundDiscoveryService : Service() {
         super.onCreate()
         createNotificationChannel()
         try {
+            val hasLocation = androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            val hasBluetooth = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.BLUETOOTH_CONNECT) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            } else {
+                hasLocation
+            }
+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                try {
-                    startForeground(
-                        NOTIFICATION_ID,
-                        createForegroundNotification(),
-                        ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE or ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
-                    )
-                } catch (_: Exception) {
+                val serviceType = if (hasBluetooth || hasLocation) {
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE or ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                } else {
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                }
+                startForeground(NOTIFICATION_ID, createForegroundNotification(), serviceType)
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val serviceType = if (hasBluetooth || hasLocation) {
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
+                } else {
+                    0
+                }
+                if (serviceType != 0) {
+                    startForeground(NOTIFICATION_ID, createForegroundNotification(), serviceType)
+                } else {
                     startForeground(NOTIFICATION_ID, createForegroundNotification())
                 }
-            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                startForeground(
-                    NOTIFICATION_ID,
-                    createForegroundNotification(),
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
-                )
             } else {
                 startForeground(NOTIFICATION_ID, createForegroundNotification())
             }
         } catch (e: Exception) {
-            Log.w(TAG, "Foreground notification start warning: ${e.message}")
+            Log.e(TAG, "Foreground start failed, trying minimal fallback: ${e.message}")
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                    startForeground(
+                        NOTIFICATION_ID,
+                        createForegroundNotification(),
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                    )
+                } else {
+                    startForeground(NOTIFICATION_ID, createForegroundNotification())
+                }
+            } catch (ex: Exception) {
+                Log.e(TAG, "Fatal failed to start foreground service: ${ex.message}")
+            }
         }
         startProximityEngine()
     }
