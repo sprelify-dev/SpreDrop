@@ -61,7 +61,7 @@ object TransferNotificationHelper {
             val sizeStr = if (sizeMb >= 1f) String.format("%.1f MB", sizeMb) else "${transfer.fileSize / 1024} KB"
 
             val notification = NotificationCompat.Builder(context, CHANNEL_TRANSFERS)
-                .setSmallIcon(android.R.drawable.stat_sys_download)
+                .setSmallIcon(android.R.drawable.stat_notify_sync)
                 .setContentTitle("Incoming SpreDrop Transfer")
                 .setContentText("${transfer.senderDisplayName} (${transfer.senderSpreDropId}) wants to send ${transfer.fileName} ($sizeStr)")
                 .setStyle(NotificationCompat.BigTextStyle().bigText(
@@ -94,7 +94,7 @@ object TransferNotificationHelper {
             val progressPercent = (transfer.progress * 100).toInt()
 
             val notification = NotificationCompat.Builder(context, CHANNEL_TRANSFERS)
-                .setSmallIcon(android.R.drawable.stat_sys_download)
+                .setSmallIcon(android.R.drawable.stat_notify_sync)
                 .setContentTitle("${if (transfer.direction == com.example.spredrop.model.TransferDirection.INCOMING) "Receiving" else "Sending"} ${transfer.fileName}")
                 .setContentText("$progressPercent% • ${transfer.formattedSpeed}")
                 .setProgress(100, progressPercent, false)
@@ -127,7 +127,7 @@ object TransferNotificationHelper {
             val text = "${transfer.fileName} transferred directly via SpreDrop WebRTC DataChannel (Checksum verified)"
 
             val notification = NotificationCompat.Builder(context, CHANNEL_TRANSFERS)
-                .setSmallIcon(android.R.drawable.stat_sys_download_done)
+                .setSmallIcon(android.R.drawable.stat_notify_sync)
                 .setContentTitle(title)
                 .setContentText(text)
                 .setContentIntent(pendingIntent)
@@ -154,7 +154,7 @@ object TransferNotificationHelper {
             )
 
             val notification = NotificationCompat.Builder(context, CHANNEL_FRIENDS)
-                .setSmallIcon(android.R.drawable.ic_menu_myplaces)
+                .setSmallIcon(android.R.drawable.stat_notify_chat)
                 .setContentTitle("New Friend Request")
                 .setContentText("$friendName ($spreDropId) wants to connect on SpreDrop")
                 .setContentIntent(pendingIntent)

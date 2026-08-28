@@ -128,7 +128,7 @@ class SpreDropBackgroundDiscoveryService : Service() {
             val db = SpreDropDatabase.getInstance(applicationContext)
             val userDao = db.userDao()
             val profile = userDao.getUserProfileOnce() ?: return@launch
-            val authUser = FirebaseAuth.getInstance().currentUser
+            val authUser = try { FirebaseAuth.getInstance().currentUser } catch (_: Exception) { null }
 
             bleManager = SpreDropBleManager(applicationContext) { discoveredPeer ->
                 Log.d(TAG, "Background discovered nearby peer: ${discoveredPeer.spreDropId} (${discoveredPeer.signalStrengthRssi} dBm)")
@@ -206,7 +206,7 @@ class SpreDropBackgroundDiscoveryService : Service() {
         )
 
         return NotificationCompat.Builder(this, CHANNEL_DISCOVERY)
-            .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
+            .setSmallIcon(android.R.drawable.stat_notify_sync)
             .setContentTitle("SpreDrop Proximity Active")
             .setContentText("Scanning for nearby SpreDrop peers • Ready to send & receive")
             .setContentIntent(pendingIntent)

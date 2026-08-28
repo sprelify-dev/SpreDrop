@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -159,107 +160,227 @@ fun SpreDropApp(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
-    Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) },
-        bottomBar = {
-            NavigationBar(
-                containerColor = MaterialTheme.colorScheme.surface,
-                tonalElevation = 6.dp,
-                modifier = Modifier.testTag("main_bottom_nav")
-            ) {
-                screens.forEach { screen ->
-                    val selected = currentRoute == screen.route
-                    val badgeCount = when (screen) {
-                        Screen.Transfers -> activeTransfers.size
-                        Screen.Friends -> incomingRequests.size
-                        else -> 0
-                    }
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val isWideScreen = maxWidth >= 600.dp
 
-                    NavigationBarItem(
-                        icon = {
-                            BadgedBox(
-                                badge = {
-                                    if (badgeCount > 0) {
-                                        Badge(
-                                            containerColor = SpreCyanAccent,
-                                            contentColor = androidx.compose.ui.graphics.Color.Black
-                                        ) {
-                                            Text(badgeCount.toString(), fontWeight = FontWeight.Bold)
+        if (isWideScreen) {
+            Row(modifier = Modifier.fillMaxSize()) {
+                NavigationRail(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    header = {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "SpreDrop",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = SpreTealPrimary
+                        )
+                    },
+                    modifier = Modifier.testTag("main_nav_rail")
+                ) {
+                    screens.forEach { screen ->
+                        val selected = currentRoute == screen.route
+                        val badgeCount = when (screen) {
+                            Screen.Transfers -> activeTransfers.size
+                            Screen.Friends -> incomingRequests.size
+                            else -> 0
+                        }
+
+                        NavigationRailItem(
+                            icon = {
+                                BadgedBox(
+                                    badge = {
+                                        if (badgeCount > 0) {
+                                            Badge(
+                                                containerColor = SpreCyanAccent,
+                                                contentColor = androidx.compose.ui.graphics.Color.Black
+                                            ) {
+                                                Text(badgeCount.toString(), fontWeight = FontWeight.Bold)
+                                            }
                                         }
                                     }
+                                ) {
+                                    Icon(
+                                        imageVector = if (selected) screen.selectedIcon else screen.unselectedIcon,
+                                        contentDescription = screen.title,
+                                        tint = if (selected) SpreTealPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
                                 }
-                            ) {
-                                Icon(
-                                    imageVector = if (selected) screen.selectedIcon else screen.unselectedIcon,
-                                    contentDescription = screen.title,
-                                    tint = if (selected) SpreTealPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                            label = {
+                                Text(
+                                    text = screen.title,
+                                    fontSize = 11.sp,
+                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (selected) SpreTealPrimary else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                            }
-                        },
-                        label = {
-                            Text(
-                                text = screen.title,
-                                fontSize = 11.sp,
-                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                                color = if (selected) SpreTealPrimary else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        },
-                        selected = selected,
-                        onClick = {
-                            if (currentRoute != screen.route) {
-                                navController.navigate(screen.route) {
-                                    popUpTo(navController.graph.findStartDestination().id) {
-                                        saveState = false
+                            },
+                            selected = selected,
+                            onClick = {
+                                if (currentRoute != screen.route) {
+                                    navController.navigate(screen.route) {
+                                        popUpTo(navController.graph.findStartDestination().id) {
+                                            saveState = false
+                                        }
+                                        launchSingleTop = true
+                                        restoreState = false
                                     }
-                                    launchSingleTop = true
-                                    restoreState = false
                                 }
+                            },
+                            colors = NavigationRailItemDefaults.colors(
+                                indicatorColor = SpreTealPrimary.copy(alpha = 0.15f)
+                            ),
+                            modifier = Modifier.testTag("nav_rail_item_${screen.route}")
+                        )
+                    }
+                }
+
+                Scaffold(
+                    snackbarHost = { SnackbarHost(snackbarHostState) },
+                    modifier = Modifier.weight(1f)
+                ) { innerPadding ->
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(innerPadding)
+                    ) {
+                        NavHostContainer(
+                            navController = navController,
+                            initialDestination = initialDestination,
+                            viewModel = viewModel,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .widthIn(max = 840.dp)
+                                .align(Alignment.Center)
+                        )
+                    }
+                }
+            }
+        } else {
+            Scaffold(
+                snackbarHost = { SnackbarHost(snackbarHostState) },
+                bottomBar = {
+                    NavigationBar(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        tonalElevation = 6.dp,
+                        modifier = Modifier.testTag("main_bottom_nav")
+                    ) {
+                        screens.forEach { screen ->
+                            val selected = currentRoute == screen.route
+                            val badgeCount = when (screen) {
+                                Screen.Transfers -> activeTransfers.size
+                                Screen.Friends -> incomingRequests.size
+                                else -> 0
                             }
-                        },
-                        colors = NavigationBarItemDefaults.colors(
-                            indicatorColor = SpreTealPrimary.copy(alpha = 0.15f)
-                        ),
-                        modifier = Modifier.testTag("nav_item_${screen.route}")
+
+                            NavigationBarItem(
+                                icon = {
+                                    BadgedBox(
+                                        badge = {
+                                            if (badgeCount > 0) {
+                                                Badge(
+                                                    containerColor = SpreCyanAccent,
+                                                    contentColor = androidx.compose.ui.graphics.Color.Black
+                                                ) {
+                                                    Text(badgeCount.toString(), fontWeight = FontWeight.Bold)
+                                                }
+                                            }
+                                        }
+                                    ) {
+                                        Icon(
+                                            imageVector = if (selected) screen.selectedIcon else screen.unselectedIcon,
+                                            contentDescription = screen.title,
+                                            tint = if (selected) SpreTealPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                },
+                                label = {
+                                    Text(
+                                        text = screen.title,
+                                        fontSize = 11.sp,
+                                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (selected) SpreTealPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                },
+                                selected = selected,
+                                onClick = {
+                                    if (currentRoute != screen.route) {
+                                        navController.navigate(screen.route) {
+                                            popUpTo(navController.graph.findStartDestination().id) {
+                                                saveState = false
+                                            }
+                                            launchSingleTop = true
+                                            restoreState = false
+                                        }
+                                    }
+                                },
+                                colors = NavigationBarItemDefaults.colors(
+                                    indicatorColor = SpreTealPrimary.copy(alpha = 0.15f)
+                                ),
+                                modifier = Modifier.testTag("nav_item_${screen.route}")
+                            )
+                        }
+                    }
+                },
+                modifier = Modifier.fillMaxSize()
+            ) { innerPadding ->
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding)
+                ) {
+                    NavHostContainer(
+                        navController = navController,
+                        initialDestination = initialDestination,
+                        viewModel = viewModel,
+                        modifier = Modifier.fillMaxSize()
                     )
                 }
             }
-        },
-        modifier = Modifier.fillMaxSize()
-    ) { innerPadding ->
-        NavHost(
-            navController = navController,
-            startDestination = initialDestination,
-            modifier = Modifier.padding(innerPadding)
-        ) {
-            composable(Screen.Home.route) {
-                HomeScreen(
-                    viewModel = viewModel,
-                    onNavigateToQrPair = { navController.navigate(Screen.QrPair.route) },
-                    onNavigateToTransfers = { navController.navigate(Screen.Transfers.route) },
-                    onNavigateToFriends = { navController.navigate(Screen.Friends.route) }
-                )
-            }
-            composable(Screen.Transfers.route) {
-                TransfersScreen(
-                    viewModel = viewModel
-                )
-            }
-            composable(Screen.Friends.route) {
-                FriendsScreen(
-                    viewModel = viewModel
-                )
-            }
-            composable(Screen.QrPair.route) {
-                QrPairScreen(
-                    viewModel = viewModel,
-                    onNavigateBack = { navController.navigate(Screen.Home.route) }
-                )
-            }
-            composable(Screen.Profile.route) {
-                ProfileSettingsScreen(
-                    viewModel = viewModel
-                )
-            }
+        }
+    }
+}
+
+@Composable
+fun NavHostContainer(
+    navController: androidx.navigation.NavHostController,
+    initialDestination: String,
+    viewModel: SpreDropViewModel,
+    modifier: Modifier = Modifier
+) {
+    NavHost(
+        navController = navController,
+        startDestination = initialDestination,
+        modifier = modifier
+    ) {
+        composable(Screen.Home.route) {
+            HomeScreen(
+                viewModel = viewModel,
+                onNavigateToQrPair = { navController.navigate(Screen.QrPair.route) },
+                onNavigateToTransfers = { navController.navigate(Screen.Transfers.route) },
+                onNavigateToFriends = { navController.navigate(Screen.Friends.route) }
+            )
+        }
+        composable(Screen.Transfers.route) {
+            TransfersScreen(
+                viewModel = viewModel
+            )
+        }
+        composable(Screen.Friends.route) {
+            FriendsScreen(
+                viewModel = viewModel
+            )
+        }
+        composable(Screen.QrPair.route) {
+            QrPairScreen(
+                viewModel = viewModel,
+                onNavigateBack = { navController.navigate(Screen.Home.route) }
+            )
+        }
+        composable(Screen.Profile.route) {
+            ProfileSettingsScreen(
+                viewModel = viewModel
+            )
         }
     }
 }

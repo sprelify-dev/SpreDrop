@@ -88,7 +88,12 @@ class SpreDropWifiP2pManager(private val context: Context) {
                 }
             }
         }
-        context.registerReceiver(receiver, intentFilter)
+        androidx.core.content.ContextCompat.registerReceiver(
+            context,
+            receiver,
+            intentFilter,
+            androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED
+        )
         isReceiverRegistered = true
         Log.d(TAG, "Wi-Fi Direct BroadcastReceiver registered")
     }
