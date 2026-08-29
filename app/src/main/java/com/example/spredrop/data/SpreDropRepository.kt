@@ -105,7 +105,11 @@ class SpreDropRepository(private val context: Context) {
                 val current = userDao.getUserProfileOnce()
                 val savedAccount = userDao.getAccountById(user.uid)
 
+                // Try to get profile from Firestore first as source of truth
+                val cloudProfile = databaseManager.getUserProfile(user.uid)
+
                 val realDisplayName = when {
+                    cloudProfile != null -> cloudProfile.displayName
                     !current?.displayName.isNullOrBlank() -> current!!.displayName
                     !savedAccount?.displayName.isNullOrBlank() -> savedAccount!!.displayName
                     !user.displayName.isNullOrBlank() -> user.displayName
@@ -113,26 +117,47 @@ class SpreDropRepository(private val context: Context) {
                 }
 
                 val realHandle = when {
+                    cloudProfile != null -> cloudProfile.spreDropId
                     !current?.spreDropId.isNullOrBlank() -> current!!.spreDropId
                     !savedAccount?.spreDropId.isNullOrBlank() -> savedAccount!!.spreDropId
                     !user.email.isNullOrBlank() -> "@" + user.email.substringBefore("@").replace(".", "_")
                     else -> "@" + user.uid.take(6)
                 }
 
+                val realVisibility = cloudProfile?.visibility ?: current?.visibility ?: PrivacyMode.VISIBLE
+                val realAvailability = cloudProfile?.availability ?: current?.availability ?: UserPresence.AVAILABLE
+                val realAvatarHex = cloudProfile?.avatarColorHex ?: current?.avatarColorHex ?: "#00B4D8"
+
                 val updated = UserProfile(
                     userId = user.uid,
                     spreDropId = realHandle,
                     displayName = realDisplayName,
-                    profilePhotoUri = user.photoUrl ?: current?.profilePhotoUri,
-                    avatarColorHex = current?.avatarColorHex ?: "#00B4D8",
-                    visibility = current?.visibility ?: PrivacyMode.VISIBLE,
-                    availability = current?.availability ?: UserPresence.AVAILABLE,
+                    profilePhotoUri = user.photoUrl ?: cloudProfile?.profilePhotoUri ?: current?.profilePhotoUri,
+                    avatarColorHex = realAvatarHex,
+                    visibility = realVisibility,
+                    availability = realAvailability,
                     deviceModel = "${android.os.Build.MANUFACTURER.replaceFirstChar { it.uppercase() }} ${android.os.Build.MODEL}",
-                    createdAt = current?.createdAt ?: System.currentTimeMillis(),
+                    createdAt = cloudProfile?.createdAt ?: current?.createdAt ?: System.currentTimeMillis(),
                     lastSeen = System.currentTimeMillis()
                 )
                 userDao.insertOrUpdateProfile(updated)
+
+                // Sync local account
+                if (savedAccount == null && !user.email.isNullOrBlank()) {
+                    userDao.insertAccount(
+                        UserAccount(
+                            email = user.email.lowercase(),
+                            passwordHash = "", // OAuth or external sign in
+                            userId = user.uid,
+                            spreDropId = realHandle,
+                            displayName = realDisplayName
+                        )
+                    )
+                }
+
                 databaseManager.uploadUserProfile(updated)
+                databaseManager.reserveUsername(realHandle, user.uid)
+
                 databaseManager.publishPeerPresence(
                     userId = updated.userId,
                     spreDropId = updated.spreDropId,
@@ -168,6 +193,19 @@ class SpreDropRepository(private val context: Context) {
     suspend fun updateProfileIdentity(spreDropId: String, displayName: String) {
         val profile = userDao.getUserProfileOnce() ?: return
         val cleanId = (if (spreDropId.startsWith("@")) spreDropId else "@$spreDropId").lowercase().trim()
+        
+        val isSameUser = cleanId == profile.spreDropId.lowercase()
+        if (!isSameUser) {
+            val available = databaseManager.isUsernameAvailable(cleanId)
+            if (!available) {
+                throw IllegalArgumentException("The SpreDrop ID $cleanId is already taken.")
+            }
+            val reservation = databaseManager.reserveUsername(cleanId, profile.userId)
+            if (reservation.isFailure || reservation.getOrDefault(false) == false) {
+                throw IllegalArgumentException("Could not reserve SpreDrop ID $cleanId. It might be taken.")
+            }
+        }
+
         userDao.updateIdentity(profile.userId, cleanId, displayName)
         userDao.updateAccountIdentity(profile.userId, cleanId, displayName)
         authManager.updateActiveSession(displayName, cleanId)
@@ -207,8 +245,17 @@ class SpreDropRepository(private val context: Context) {
     }
 
     suspend fun signUpWithEmail(email: String, pass: String, displayName: String, spreDropId: String): Result<AuthenticatedAccount> {
-        val result = authManager.signUpWithEmail(email, pass, displayName, spreDropId)
+        val cleanId = (if (spreDropId.startsWith("@")) spreDropId else "@$spreDropId").lowercase().trim()
+        val available = databaseManager.isUsernameAvailable(cleanId)
+        if (!available) {
+            return Result.failure(IllegalArgumentException("The SpreDrop ID $cleanId is already taken. Please choose a different handle."))
+        }
+        val result = authManager.signUpWithEmail(email, pass, displayName, cleanId)
         if (result.isSuccess) {
+            val user = result.getOrNull()
+            if (user != null) {
+                databaseManager.reserveUsername(cleanId, user.uid)
+            }
             syncWithFirestoreNow()
         }
         return result

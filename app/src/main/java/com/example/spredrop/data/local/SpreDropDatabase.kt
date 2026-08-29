@@ -105,6 +105,9 @@ interface FriendDao {
     @Query("SELECT * FROM friends WHERE status = 'FRIENDS' ORDER BY availability ASC, displayName ASC")
     fun getFriends(): Flow<List<Friend>>
 
+    @Query("SELECT * FROM friends WHERE status = 'FRIENDS'")
+    suspend fun getFriendsOnce(): List<Friend>
+
     @Query("SELECT * FROM friends WHERE status = 'REQUEST_RECEIVED' ORDER BY lastSeen DESC")
     fun getIncomingFriendRequests(): Flow<List<Friend>>
 

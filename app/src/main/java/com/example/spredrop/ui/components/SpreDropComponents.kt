@@ -538,9 +538,6 @@ fun AnimatedTransferFlow(
 @Composable
 fun SpreDropTopBar(
     userProfile: UserProfile?,
-    isOnline: Boolean,
-    onPresenceClick: () -> Unit,
-    onSimulateTransfer: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Surface(
@@ -561,35 +558,6 @@ fun SpreDropTopBar(
                 showText = true,
                 subtitle = userProfile?.spreDropId ?: "@spredrop"
             )
-
-            // Right Action Controls
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                // Presence Pill
-                userProfile?.let {
-                    PresenceStatusPill(
-                        presence = it.availability,
-                        onClick = onPresenceClick,
-                        modifier = Modifier.testTag("presence_pill_button")
-                    )
-                }
-
-                // Radar Scan / Refresh Quick Action
-                IconButton(
-                    onClick = onSimulateTransfer,
-                    modifier = Modifier
-                        .size(36.dp)
-                        .testTag("refresh_radar_discovery_button")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Radar,
-                        contentDescription = "Scan Nearby SpreDrop Devices",
-                        tint = SpreCyanAccent
-                    )
-                }
-            }
         }
     }
 }

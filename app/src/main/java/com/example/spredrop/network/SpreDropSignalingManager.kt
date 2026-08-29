@@ -174,6 +174,22 @@ class SpreDropSignalingManager(
                         cloudPeersMap[peer.spreDropId.lowercase()] = peer
                     }
                 }
+
+                // Update online status of friends in local DB from online cloud peers list
+                try {
+                    val onlineSpreDropIds = peers.map { it.spreDropId.lowercase().trim() }.toSet()
+                    val friendsList = friendDao.getFriendsOnce()
+                    friendsList.forEach { friend ->
+                        val isOnlineNow = onlineSpreDropIds.contains(friend.spreDropId.lowercase().trim())
+                        val targetPresence = if (isOnlineNow) UserPresence.ONLINE else UserPresence.OFFLINE
+                        if (friend.availability != targetPresence) {
+                            friendDao.updateFriendPresence(friend.userId, targetPresence, System.currentTimeMillis())
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to update friend statuses: ${e.message}")
+                }
+
                 combineAndPublishDiscoveredPeers()
             }
         }
@@ -277,25 +293,15 @@ class SpreDropSignalingManager(
 
         val combined = mutableMapOf<String, PeerDevice>()
 
-        // 1. Cloud online peers
-        synchronized(cloudPeersMap) {
-            cloudPeersMap.forEach { (key, peer) -> 
-                if (peer.deviceId != selfUserId && peer.spreDropId.lowercase() != selfSpreDropId) {
-                    combined[key] = peer
-                }
-            }
-        }
-
-        // 2. BLE proximity peers (take priority for RSSI & connection type)
+        // 1. BLE proximity peers (take priority for RSSI & connection type)
         synchronized(blePeersMap) {
             blePeersMap.forEach { (key, blePeer) ->
                 if (blePeer.deviceId != selfUserId && blePeer.spreDropId.lowercase() != selfSpreDropId) {
-                    val existing = combined[key]
-                    if (existing != null) {
-                        combined[key] = existing.copy(
-                            signalStrengthRssi = blePeer.signalStrengthRssi,
-                            connectionType = PeerConnectionType.NEARBY_BLE,
-                            lastDiscovered = System.currentTimeMillis()
+                    val cloudEquivalent = synchronized(cloudPeersMap) { cloudPeersMap[key] }
+                    if (cloudEquivalent != null) {
+                        combined[key] = blePeer.copy(
+                            supportedCapabilities = cloudEquivalent.supportedCapabilities,
+                            ipAddress = cloudEquivalent.ipAddress
                         )
                     } else {
                         combined[key] = blePeer
@@ -304,7 +310,7 @@ class SpreDropSignalingManager(
             }
         }
 
-        // 3. Manually paired peers
+        // 2. Manually paired peers
         synchronized(manualPeersMap) {
             manualPeersMap.forEach { (key, peer) ->
                 if (peer.deviceId != selfUserId && peer.spreDropId.lowercase() != selfSpreDropId) {

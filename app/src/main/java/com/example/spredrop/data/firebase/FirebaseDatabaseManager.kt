@@ -76,6 +76,76 @@ class FirebaseDatabaseManager {
     // USER PROFILE SYNC
     // -------------------------------------------------------------
 
+    suspend fun isUsernameAvailable(spreDropId: String): Boolean {
+        val fs = firestore
+        if (fs == null || !isConfigured) return true
+        val cleanId = spreDropId.removePrefix("@").lowercase().trim()
+        if (cleanId.isEmpty()) return false
+        return try {
+            val doc = fs.collection("usernames").document(cleanId).get().await()
+            !doc.exists()
+        } catch (e: Exception) {
+            Log.e("FirebaseDatabaseManager", "Error checking username availability: ${e.message}")
+            true
+        }
+    }
+
+    suspend fun reserveUsername(spreDropId: String, userId: String): Result<Boolean> {
+        val fs = firestore
+        if (fs == null || !isConfigured) return Result.success(true)
+        val cleanId = spreDropId.removePrefix("@").lowercase().trim()
+        if (cleanId.isEmpty()) return Result.failure(IllegalArgumentException("Username cannot be empty"))
+        return try {
+            val docRef = fs.collection("usernames").document(cleanId)
+            val success = fs.runTransaction { transaction ->
+                val snapshot = transaction.get(docRef)
+                if (snapshot.exists()) {
+                    val existingOwner = snapshot.getString("ownerUid")
+                    existingOwner == userId
+                } else {
+                    transaction.set(docRef, mapOf("ownerUid" to userId))
+                    true
+                }
+            }.await()
+            Result.success(success)
+        } catch (e: Exception) {
+            Log.e("FirebaseDatabaseManager", "Error reserving username: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getUserProfile(userId: String): UserProfile? {
+        val fs = firestore
+        if (fs == null || !isConfigured) return null
+        return try {
+            val snapshot = fs.collection("users").document(userId).get().await()
+            if (snapshot != null && snapshot.exists()) {
+                val spreDropId = snapshot.getString("spreDropId") ?: "@user"
+                val displayName = snapshot.getString("displayName") ?: "SpreDrop User"
+                val avatarColorHex = snapshot.getString("avatarColorHex") ?: "#00B4D8"
+                val visibilityStr = snapshot.getString("visibility") ?: PrivacyMode.VISIBLE.name
+                val availabilityStr = snapshot.getString("availability") ?: UserPresence.AVAILABLE.name
+                val deviceModel = snapshot.getString("deviceModel") ?: "Android"
+
+                UserProfile(
+                    userId = userId,
+                    spreDropId = spreDropId,
+                    displayName = displayName,
+                    avatarColorHex = avatarColorHex,
+                    visibility = runCatching { PrivacyMode.valueOf(visibilityStr) }.getOrDefault(PrivacyMode.VISIBLE),
+                    availability = runCatching { UserPresence.valueOf(availabilityStr) }.getOrDefault(UserPresence.AVAILABLE),
+                    deviceModel = deviceModel,
+                    lastSeen = snapshot.getLong("lastSeen") ?: System.currentTimeMillis()
+                )
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            Log.e("FirebaseDatabaseManager", "Error fetching user profile: ${e.message}")
+            null
+        }
+    }
+
     suspend fun uploadUserProfile(profile: UserProfile): Result<Unit> {
         val fs = firestore
         if (fs == null || !isConfigured) {

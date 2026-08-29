@@ -113,10 +113,7 @@ fun HomeScreen(
     Scaffold(
         topBar = {
             SpreDropTopBar(
-                userProfile = userProfile,
-                isOnline = isOnline,
-                onPresenceClick = { showPresenceDialog = true },
-                onSimulateTransfer = { viewModel.refreshDiscovery() }
+                userProfile = userProfile
             )
         },
         floatingActionButton = {
