@@ -171,7 +171,7 @@ fun ActiveTransferDetailCard(
     onCancel: () -> Unit
 ) {
     val isIncoming = transfer.direction == TransferDirection.INCOMING
-    val isPending = transfer.status == TransferStatus.PENDING
+    val isPending = transfer.status == TransferStatus.REQUESTED
 
     Surface(
         color = MaterialTheme.colorScheme.surface,

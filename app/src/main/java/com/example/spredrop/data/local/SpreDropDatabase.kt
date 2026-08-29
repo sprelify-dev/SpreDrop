@@ -144,7 +144,7 @@ interface TransferDao {
     @Query("SELECT * FROM transfers ORDER BY timestamp DESC")
     fun getAllTransfers(): Flow<List<TransferRecord>>
 
-    @Query("SELECT * FROM transfers WHERE status IN ('PENDING', 'ACCEPTED', 'NEGOTIATING_WEBRTC', 'TRANSFERRING', 'VERIFYING') ORDER BY timestamp DESC")
+    @Query("SELECT * FROM transfers WHERE status IN ('CREATED', 'REQUESTED', 'ACCEPTED', 'CONNECTION_PENDING', 'CONNECTION_READY', 'TRANSFERRING') ORDER BY timestamp DESC")
     fun getActiveTransfers(): Flow<List<TransferRecord>>
 
     @Query("SELECT * FROM transfers WHERE status = 'COMPLETED' AND direction = 'INCOMING' ORDER BY timestamp DESC")
@@ -177,7 +177,10 @@ interface TransferDao {
     @Query("DELETE FROM transfers WHERE timestamp < :cutoffTimestamp")
     suspend fun pruneOldTransfers(cutoffTimestamp: Long)
 
-    @Query("DELETE FROM transfers WHERE status NOT IN ('PENDING', 'ACCEPTED', 'NEGOTIATING_WEBRTC', 'TRANSFERRING', 'VERIFYING')")
+    @Query("SELECT * FROM transfers") // Fallback clean up or selective prune if needed
+    suspend fun getAllTransfersOnce(): List<TransferRecord>
+
+    @Query("DELETE FROM transfers WHERE status NOT IN ('CREATED', 'REQUESTED', 'ACCEPTED', 'CONNECTION_PENDING', 'CONNECTION_READY', 'TRANSFERRING')")
     suspend fun clearCompletedHistory()
 }
 

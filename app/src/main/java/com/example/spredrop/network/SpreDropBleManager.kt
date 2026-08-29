@@ -174,7 +174,11 @@ class SpreDropBleManager(
             val handleRaw = if (serviceData != null && serviceData.isNotEmpty()) {
                 String(serviceData, StandardCharsets.UTF_8)
             } else {
-                result.device.name ?: "Nearby SpreDrop"
+                try {
+                    result.device.name ?: "Nearby SpreDrop"
+                } catch (_: SecurityException) {
+                    "Nearby SpreDrop"
+                }
             }
 
             val handle = if (handleRaw.startsWith("@")) handleRaw else "@$handleRaw"

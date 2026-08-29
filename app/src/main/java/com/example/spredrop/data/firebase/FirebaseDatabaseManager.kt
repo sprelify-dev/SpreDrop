@@ -146,6 +146,23 @@ class FirebaseDatabaseManager {
         }
     }
 
+    suspend fun getUserByUsername(spreDropId: String): UserProfile? {
+        val fs = firestore ?: return null
+        val cleanId = spreDropId.removePrefix("@").lowercase().trim()
+        return try {
+            val doc = fs.collection("usernames").document(cleanId).get().await()
+            if (doc != null && doc.exists()) {
+                val ownerUid = doc.getString("ownerUid")
+                if (ownerUid != null) {
+                    getUserProfile(ownerUid)
+                } else null
+            } else null
+        } catch (e: Exception) {
+            Log.e("FirebaseDatabaseManager", "Error in getUserByUsername: ${e.message}")
+            null
+        }
+    }
+
     suspend fun uploadUserProfile(profile: UserProfile): Result<Unit> {
         val fs = firestore
         if (fs == null || !isConfigured) {
@@ -366,30 +383,32 @@ class FirebaseDatabaseManager {
     }
 
     // -------------------------------------------------------------
-    // CLOUD FRIEND REQUESTS
+    // CLOUD FRIEND REQUESTS & RELATIONSHIPS (REAL LIFE CYCLE)
     // -------------------------------------------------------------
 
     suspend fun sendCloudFriendRequest(
         fromProfile: UserProfile,
-        targetSpreDropId: String
+        targetProfile: UserProfile
     ): Result<Unit> {
         val fs = firestore
         if (fs == null || !isConfigured) return Result.success(Unit)
         return try {
-            val requestId = "req_${fromProfile.userId}_${targetSpreDropId.replace("@", "")}"
+            val requestId = "${fromProfile.userId}_${targetProfile.userId}"
             val requestDoc = mapOf(
-                "id" to requestId,
-                "fromUserId" to fromProfile.userId,
-                "fromSpreDropId" to fromProfile.spreDropId,
-                "fromDisplayName" to fromProfile.displayName,
-                "fromAvatarColorHex" to fromProfile.avatarColorHex,
-                "toSpreDropId" to targetSpreDropId,
+                "requestId" to requestId,
+                "senderUid" to fromProfile.userId,
+                "senderSpreDropId" to fromProfile.spreDropId,
+                "senderDisplayName" to fromProfile.displayName,
+                "senderAvatarColorHex" to fromProfile.avatarColorHex,
+                "receiverUid" to targetProfile.userId,
+                "receiverSpreDropId" to targetProfile.spreDropId,
+                "receiverDisplayName" to targetProfile.displayName,
                 "status" to "PENDING",
-                "timestamp" to System.currentTimeMillis(),
+                "createdAt" to System.currentTimeMillis(),
                 "projectId" to "spredrop"
             )
 
-            fs.collection("friend_requests")
+            fs.collection("friendRequests")
                 .document(requestId)
                 .set(requestDoc, SetOptions.merge())
                 .await()
@@ -401,7 +420,7 @@ class FirebaseDatabaseManager {
         }
     }
 
-    fun observeIncomingCloudFriendRequests(mySpreDropId: String): Flow<List<CloudFriendRequest>> = callbackFlow {
+    fun observeIncomingCloudFriendRequests(myUserId: String): Flow<List<CloudFriendRequest>> = callbackFlow {
         val fs = firestore
         if (fs == null || !isConfigured) {
             trySend(emptyList())
@@ -410,8 +429,8 @@ class FirebaseDatabaseManager {
         }
         var registration: ListenerRegistration? = null
         try {
-            registration = fs.collection("friend_requests")
-                .whereEqualTo("toSpreDropId", mySpreDropId)
+            registration = fs.collection("friendRequests")
+                .whereEqualTo("receiverUid", myUserId)
                 .whereEqualTo("status", "PENDING")
                 .addSnapshotListener { snapshots, error ->
                     if (error != null) {
@@ -420,22 +439,21 @@ class FirebaseDatabaseManager {
                     }
                     if (snapshots != null) {
                         val requests = snapshots.documents.mapNotNull { doc ->
-                            val id = doc.getString("id") ?: doc.id
-                            val fromUserId = doc.getString("fromUserId") ?: return@mapNotNull null
-                            val fromSpreDropId = doc.getString("fromSpreDropId") ?: "@user"
-                            val fromDisplayName = doc.getString("fromDisplayName") ?: "User"
-                            val fromAvatarHex = doc.getString("fromAvatarColorHex") ?: "#00B4D8"
-                            val toSpreDropId = doc.getString("toSpreDropId") ?: mySpreDropId
+                            val id = doc.getString("requestId") ?: doc.id
+                            val senderUid = doc.getString("senderUid") ?: return@mapNotNull null
+                            val senderSpreDropId = doc.getString("senderSpreDropId") ?: "@user"
+                            val senderDisplayName = doc.getString("senderDisplayName") ?: "User"
+                            val senderAvatarHex = doc.getString("senderAvatarColorHex") ?: "#00B4D8"
                             val status = doc.getString("status") ?: "PENDING"
-                            val ts = doc.getLong("timestamp") ?: System.currentTimeMillis()
+                            val ts = doc.getLong("createdAt") ?: System.currentTimeMillis()
 
                             CloudFriendRequest(
                                 id = id,
-                                fromUserId = fromUserId,
-                                fromSpreDropId = fromSpreDropId,
-                                fromDisplayName = fromDisplayName,
-                                fromAvatarColorHex = fromAvatarHex,
-                                toSpreDropId = toSpreDropId,
+                                fromUserId = senderUid,
+                                fromSpreDropId = senderSpreDropId,
+                                fromDisplayName = senderDisplayName,
+                                fromAvatarColorHex = senderAvatarHex,
+                                toSpreDropId = doc.getString("receiverSpreDropId") ?: "",
                                 status = status,
                                 timestamp = ts
                             )
@@ -462,32 +480,28 @@ class FirebaseDatabaseManager {
         }
         var registration: ListenerRegistration? = null
         try {
-            registration = fs.collection("friend_requests")
-                .whereEqualTo("fromSpreDropId", mySpreDropId)
+            registration = fs.collection("friendRequests")
+                .whereEqualTo("senderSpreDropId", mySpreDropId)
                 .whereEqualTo("status", "ACCEPTED")
                 .addSnapshotListener { snapshots, error ->
-                    if (error != null) {
-                        Log.e("FirebaseDatabaseManager", "Accepted requests listener error: ${error.message}")
-                        return@addSnapshotListener
-                    }
-                    if (snapshots != null) {
+                    if (error == null && snapshots != null) {
                         val requests = snapshots.documents.mapNotNull { doc ->
-                            val id = doc.getString("id") ?: doc.id
-                            val fromUserId = doc.getString("fromUserId") ?: ""
-                            val fromSpreDropId = doc.getString("fromSpreDropId") ?: "@user"
-                            val fromDisplayName = doc.getString("fromDisplayName") ?: "User"
-                            val fromAvatarHex = doc.getString("fromAvatarColorHex") ?: "#00B4D8"
-                            val toSpreDropId = doc.getString("toSpreDropId") ?: ""
+                            val id = doc.getString("requestId") ?: doc.id
+                            val senderUid = doc.getString("senderUid") ?: ""
+                            val senderSpreDropId = doc.getString("senderSpreDropId") ?: "@user"
+                            val senderDisplayName = doc.getString("senderDisplayName") ?: "User"
+                            val senderAvatarHex = doc.getString("senderAvatarColorHex") ?: "#00B4D8"
+                            val receiverSpreDropId = doc.getString("receiverSpreDropId") ?: ""
                             val status = doc.getString("status") ?: "PENDING"
-                            val ts = doc.getLong("timestamp") ?: System.currentTimeMillis()
+                            val ts = doc.getLong("createdAt") ?: System.currentTimeMillis()
 
                             CloudFriendRequest(
                                 id = id,
-                                fromUserId = fromUserId,
-                                fromSpreDropId = fromSpreDropId,
-                                fromDisplayName = fromDisplayName,
-                                fromAvatarColorHex = fromAvatarHex,
-                                toSpreDropId = toSpreDropId,
+                                fromUserId = senderUid,
+                                fromSpreDropId = senderSpreDropId,
+                                fromDisplayName = senderDisplayName,
+                                fromAvatarColorHex = senderAvatarHex,
+                                toSpreDropId = receiverSpreDropId,
                                 status = status,
                                 timestamp = ts
                             )
@@ -496,26 +510,177 @@ class FirebaseDatabaseManager {
                     }
                 }
         } catch (e: Exception) {
-            Log.e("FirebaseDatabaseManager", "Error listening to accepted requests: ${e.message}")
+            Log.e("FirebaseDatabaseManager", "Error in accepted requests listener: ${e.message}")
             trySend(emptyList())
         }
-
         awaitClose {
             registration?.remove()
         }
     }
 
-    suspend fun updateCloudFriendRequestStatus(requestId: String, status: String): Result<Unit> {
+    suspend fun acceptCloudFriendRequest(myUserId: String, requestId: String): Result<Unit> {
         val fs = firestore
         if (fs == null || !isConfigured) return Result.success(Unit)
         return try {
-            fs.collection("friend_requests")
-                .document(requestId)
-                .update("status", status)
-                .await()
+            val reqRef = fs.collection("friendRequests").document(requestId)
+            val snapshot = reqRef.get().await()
+            if (!snapshot.exists()) {
+                return Result.failure(Exception("Friend request not found"))
+            }
+            val receiverUid = snapshot.getString("receiverUid")
+            if (receiverUid != myUserId) {
+                return Result.failure(Exception("Unauthorized: You are not the receiver of this request"))
+            }
+
+            // Update status of the request
+            reqRef.update("status", "ACCEPTED").await()
+
+            // Fetch both profiles to build friendship doc
+            val senderUid = snapshot.getString("senderUid") ?: ""
+            val senderProfile = getUserProfile(senderUid)
+            val receiverProfile = getUserProfile(myUserId)
+
+            if (senderProfile != null && receiverProfile != null) {
+                val relationshipId = if (senderUid < myUserId) "${senderUid}_${myUserId}" else "${myUserId}_${senderUid}"
+                val friendshipDoc = mapOf(
+                    "relationshipId" to relationshipId,
+                    "userA_uid" to senderProfile.userId,
+                    "userA_spreDropId" to senderProfile.spreDropId,
+                    "userA_displayName" to senderProfile.displayName,
+                    "userA_avatarColorHex" to senderProfile.avatarColorHex,
+                    "userB_uid" to receiverProfile.userId,
+                    "userB_spreDropId" to receiverProfile.spreDropId,
+                    "userB_displayName" to receiverProfile.displayName,
+                    "userB_avatarColorHex" to receiverProfile.avatarColorHex,
+                    "createdAt" to System.currentTimeMillis(),
+                    "projectId" to "spredrop"
+                )
+
+                fs.collection("friendships")
+                    .document(relationshipId)
+                    .set(friendshipDoc, SetOptions.merge())
+                    .await()
+            }
+
             Result.success(Unit)
         } catch (e: Exception) {
+            Log.e("FirebaseDatabaseManager", "Error accepting friend request: ${e.message}")
             Result.failure(e)
+        }
+    }
+
+    suspend fun rejectCloudFriendRequest(myUserId: String, requestId: String): Result<Unit> {
+        val fs = firestore
+        if (fs == null || !isConfigured) return Result.success(Unit)
+        return try {
+            val reqRef = fs.collection("friendRequests").document(requestId)
+            val snapshot = reqRef.get().await()
+            if (snapshot.exists()) {
+                val receiverUid = snapshot.getString("receiverUid")
+                if (receiverUid == myUserId) {
+                    reqRef.update("status", "REJECTED").await()
+                }
+            }
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e("FirebaseDatabaseManager", "Error rejecting friend request: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
+    fun observeCloudFriendships(userId: String): Flow<List<Friend>> = callbackFlow {
+        val fs = firestore
+        if (fs == null || !isConfigured) {
+            trySend(emptyList())
+            awaitClose { }
+            return@callbackFlow
+        }
+        var regA: ListenerRegistration? = null
+        var regB: ListenerRegistration? = null
+        val listA = mutableListOf<Friend>()
+        val listB = mutableListOf<Friend>()
+
+        fun sendCombined() {
+            val combined = (listA + listB).distinctBy { it.userId }
+            trySend(combined)
+        }
+
+        try {
+            regA = fs.collection("friendships")
+                .whereEqualTo("userA_uid", userId)
+                .addSnapshotListener { snapshots, error ->
+                    if (error == null && snapshots != null) {
+                        listA.clear()
+                        snapshots.documents.forEach { doc ->
+                            val otherUid = doc.getString("userB_uid") ?: ""
+                            val otherSpreDropId = doc.getString("userB_spreDropId") ?: ""
+                            val otherDisplayName = doc.getString("userB_displayName") ?: ""
+                            val otherAvatarHex = doc.getString("userB_avatarColorHex") ?: "#00B4D8"
+                            if (otherUid.isNotEmpty()) {
+                                listA.add(
+                                    Friend(
+                                        userId = otherUid,
+                                        spreDropId = otherSpreDropId,
+                                        displayName = otherDisplayName,
+                                        avatarColorHex = otherAvatarHex,
+                                        status = FriendStatus.FRIENDS,
+                                        availability = UserPresence.OFFLINE
+                                    )
+                                )
+                            }
+                        }
+                        sendCombined()
+                    }
+                }
+
+            regB = fs.collection("friendships")
+                .whereEqualTo("userB_uid", userId)
+                .addSnapshotListener { snapshots, error ->
+                    if (error == null && snapshots != null) {
+                        listB.clear()
+                        snapshots.documents.forEach { doc ->
+                            val otherUid = doc.getString("userA_uid") ?: ""
+                            val otherSpreDropId = doc.getString("userA_spreDropId") ?: ""
+                            val otherDisplayName = doc.getString("userA_displayName") ?: ""
+                            val otherAvatarHex = doc.getString("userA_avatarColorHex") ?: "#00B4D8"
+                            if (otherUid.isNotEmpty()) {
+                                listB.add(
+                                    Friend(
+                                        userId = otherUid,
+                                        spreDropId = otherSpreDropId,
+                                        displayName = otherDisplayName,
+                                        avatarColorHex = otherAvatarHex,
+                                        status = FriendStatus.FRIENDS,
+                                        availability = UserPresence.OFFLINE
+                                    )
+                                )
+                            }
+                        }
+                        sendCombined()
+                    }
+                }
+        } catch (e: Exception) {
+            Log.e("FirebaseDatabaseManager", "Error in friendships listener: ${e.message}")
+        }
+
+        awaitClose {
+            regA?.remove()
+            regB?.remove()
+        }
+    }
+
+    suspend fun removeFriendshipInCloud(userId: String, friendId: String) {
+        val fs = firestore
+        if (fs == null || !isConfigured) return
+        try {
+            val relationshipId = if (userId < friendId) "${userId}_${friendId}" else "${friendId}_${userId}"
+            fs.collection("friendships").document(relationshipId).delete().await()
+            val requestId1 = "${userId}_${friendId}"
+            val requestId2 = "${friendId}_${userId}"
+            fs.collection("friendRequests").document(requestId1).delete().await()
+            fs.collection("friendRequests").document(requestId2).delete().await()
+        } catch (e: Exception) {
+            Log.e("FirebaseDatabaseManager", "Error deleting friendship in cloud: ${e.message}")
         }
     }
 
@@ -599,7 +764,7 @@ class FirebaseDatabaseManager {
                                 receiverSpreDropId = mySpreDropId,
                                 receiverDisplayName = "Me",
                                 direction = TransferDirection.INCOMING,
-                                status = TransferStatus.PENDING,
+                                status = TransferStatus.REQUESTED,
                                 totalBytes = fileSize,
                                 chunkSize = 64 * 1024,
                                 totalChunks = ((fileSize + 64 * 1024 - 1) / (64 * 1024)).toInt().coerceAtLeast(1),
@@ -650,8 +815,8 @@ class FirebaseDatabaseManager {
             }
             
             // Prune old friend requests
-            val oldReqs = fs.collection("friend_requests")
-                .whereLessThan("timestamp", thirtyDaysAgo)
+            val oldReqs = fs.collection("friendRequests")
+                .whereLessThan("createdAt", thirtyDaysAgo)
                 .get()
                 .await()
             for (doc in oldReqs.documents) {

@@ -74,7 +74,7 @@ class P2PTransferEngine(
                     receiverSpreDropId = receiver.spreDropId,
                     receiverDisplayName = receiver.displayName,
                     direction = TransferDirection.OUTGOING,
-                    status = TransferStatus.NEGOTIATING_WEBRTC,
+                    status = TransferStatus.REQUESTED,
                     totalBytes = fileSize,
                     chunkSize = chunkSize,
                     totalChunks = totalChunks,
@@ -104,8 +104,9 @@ class P2PTransferEngine(
                                 if (status == "ACCEPTED") {
                                     proposalAccepted = true
                                     receiverIpFromProposal = snapshot.getString("receiverIp") ?: ""
+                                    transferDao.updateStatus(transferId, TransferStatus.ACCEPTED)
                                 } else if (status == "DECLINED" || status == "REJECTED") {
-                                    transferDao.updateStatus(transferId, TransferStatus.DECLINED, "Transfer declined by receiver")
+                                    transferDao.updateStatus(transferId, TransferStatus.REJECTED, "Transfer declined by receiver")
                                     log("TRANSFER", "Transfer proposal was declined by receiver.")
                                     return@launch
                                 }
@@ -120,7 +121,7 @@ class P2PTransferEngine(
                     }
 
                     if (!proposalAccepted) {
-                        transferDao.updateStatus(transferId, TransferStatus.FAILED, "Receiver did not accept the request in time.")
+                        transferDao.updateStatus(transferId, TransferStatus.EXPIRED, "Receiver did not accept the request in time.")
                         log("TRANSFER", "Transfer proposal timed out.")
                         return@launch
                     }
@@ -128,10 +129,12 @@ class P2PTransferEngine(
                     // Fallback to auto-accept if Firestore is not configured/offline
                     delay(1000)
                     proposalAccepted = true
+                    transferDao.updateStatus(transferId, TransferStatus.ACCEPTED)
                 }
 
-                transferDao.updateStatus(transferId, TransferStatus.TRANSFERRING)
-                log("WEBRTC", "WebRTC DataChannel opened. Streaming $totalChunks chunks ($fileSize bytes) to ${receiver.spreDropId}")
+                // Transition to CONNECTION_PENDING as we start direct network connection
+                transferDao.updateStatus(transferId, TransferStatus.CONNECTION_PENDING)
+                log("WEBRTC", "Receiver accepted. Preparing network connection...")
 
                 var bytesSent = 0L
                 var chunksSent = 0
@@ -166,8 +169,13 @@ class P2PTransferEngine(
                         val outputStream = directSocket.getOutputStream()
                         val dataOutput = java.io.DataOutputStream(outputStream)
                         
+                        // Transition to CONNECTION_READY
+                        transferDao.updateStatus(transferId, TransferStatus.CONNECTION_READY)
                         dataOutput.writeLong(fileSize)
                         dataOutput.flush()
+
+                        // Transition to TRANSFERRING
+                        transferDao.updateStatus(transferId, TransferStatus.TRANSFERRING)
 
                         inputStream.use { stream ->
                             val buffer = ByteArray(chunkSize)
@@ -191,6 +199,12 @@ class P2PTransferEngine(
                         throw e
                     }
                 } else {
+                    // Transition to CONNECTION_READY for the relay channel
+                    transferDao.updateStatus(transferId, TransferStatus.CONNECTION_READY)
+
+                    // Transition to TRANSFERRING
+                    transferDao.updateStatus(transferId, TransferStatus.TRANSFERRING)
+
                     inputStream.use { stream ->
                         val buffer = ByteArray(chunkSize)
                         var bytesRead = stream.read(buffer)
@@ -434,7 +448,7 @@ class P2PTransferEngine(
                 }
 
                 // File verification phase
-                transferDao.updateStatus(transferId, TransferStatus.VERIFYING)
+                transferDao.updateStatus(transferId, TransferStatus.TRANSFERRING)
                 log("INTEGRITY", "Verifying SHA-256 file checksum for $fileName...")
                 delay(300)
 

@@ -118,7 +118,7 @@ class MainActivity : ComponentActivity() {
 
                         SpreDropApp(
                             viewModel = viewModel,
-                            initialDestination = intent?.getStringExtra("nav_destination") ?: Screen.Home.route
+                            initialDestination = intent?.getStringExtra("nav_destination") ?: Screen.Transfers.route
                         )
                     } else {
                         AuthScreen(
@@ -134,7 +134,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun SpreDropApp(
     viewModel: SpreDropViewModel,
-    initialDestination: String = Screen.Home.route
+    initialDestination: String = Screen.Transfers.route
 ) {
     val navController = rememberNavController()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -150,7 +150,6 @@ fun SpreDropApp(
     }
 
     val screens = listOf(
-        Screen.Home,
         Screen.Transfers,
         Screen.Friends,
         Screen.QrPair,
@@ -374,7 +373,7 @@ fun NavHostContainer(
         composable(Screen.QrPair.route) {
             QrPairScreen(
                 viewModel = viewModel,
-                onNavigateBack = { navController.navigate(Screen.Home.route) }
+                onNavigateBack = { navController.navigate(Screen.Transfers.route) }
             )
         }
         composable(Screen.Profile.route) {

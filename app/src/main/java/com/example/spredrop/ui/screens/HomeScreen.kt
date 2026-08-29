@@ -751,7 +751,7 @@ fun ActiveTransferCard(
     modifier: Modifier = Modifier
 ) {
     val isIncoming = transfer.direction == TransferDirection.INCOMING
-    val isPending = transfer.status == TransferStatus.PENDING
+    val isPending = transfer.status == TransferStatus.REQUESTED
 
     Surface(
         color = if (isPending) SpreDarkSurfaceVariant.copy(alpha = 0.35f) else MaterialTheme.colorScheme.surface,

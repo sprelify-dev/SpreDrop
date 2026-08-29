@@ -38,15 +38,17 @@ enum class TransferDirection {
  * Transfer state machine
  */
 enum class TransferStatus(val label: String) {
-    PENDING("Waiting for acceptance"),
+    CREATED("Created"),
+    REQUESTED("Requested"),
     ACCEPTED("Accepted, connecting..."),
-    NEGOTIATING_WEBRTC("Negotiating WebRTC..."),
+    CONNECTION_PENDING("Preparing connection..."),
+    CONNECTION_READY("Ready to connect"),
     TRANSFERRING("Transferring"),
-    VERIFYING("Verifying file integrity..."),
     COMPLETED("Completed"),
-    DECLINED("Declined"),
-    FAILED("Transfer Failed"),
-    CANCELLED("Cancelled")
+    REJECTED("Rejected"),
+    CANCELLED("Cancelled"),
+    FAILED("Failed"),
+    EXPIRED("Expired")
 }
 
 /**

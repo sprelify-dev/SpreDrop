@@ -299,17 +299,33 @@ class SpreDropRepository(private val context: Context) {
 
     suspend fun sendFriendRequest(targetSpreDropId: String, targetDisplayName: String) {
         val cleanId = (if (targetSpreDropId.startsWith("@")) targetSpreDropId else "@$targetSpreDropId").lowercase().trim()
-        val profile = userDao.getUserProfileOnce()
-        if (profile != null) {
-            databaseManager.sendCloudFriendRequest(profile, cleanId)
+        val profile = userDao.getUserProfileOnce() ?: throw IllegalStateException("Profile not logged in")
+        if (profile.spreDropId.lowercase().trim() == cleanId) {
+            throw IllegalArgumentException("You cannot send a friend request to yourself!")
         }
 
-        val existing = friendDao.getFriendBySpreDropId(cleanId)
-        if (existing != null) {
-            if (existing.status == FriendStatus.NONE || existing.status == FriendStatus.REQUEST_RECEIVED) {
-                friendDao.updateFriendStatus(existing.userId, FriendStatus.FRIENDS)
-            }
+        // Check if Firebase signaling is configured and actively online
+        val isNetworkAvailable = databaseManager.isConfigured && signalingManager.isOnline.value
+
+        if (isNetworkAvailable) {
+            // Firebase Lookup to verify that the username actually exists
+            val targetProfile = databaseManager.getUserByUsername(cleanId)
+                ?: throw IllegalArgumentException("User with username $cleanId does not exist on SpreDrop.")
+
+            // Send cloud friend request using verified profiles
+            databaseManager.sendCloudFriendRequest(profile, targetProfile)
+
+            // Save request_sent in local DB with the actual user Uid
+            val newFriend = Friend(
+                userId = targetProfile.userId,
+                spreDropId = targetProfile.spreDropId,
+                displayName = targetDisplayName.ifBlank { targetProfile.displayName },
+                status = FriendStatus.REQUEST_SENT,
+                availability = targetProfile.availability
+            )
+            friendDao.insertOrUpdateFriend(newFriend)
         } else {
+            // Offline fallback: Create the friend locally with a generated ID so offline transfers can proceed
             val newFriend = Friend(
                 userId = "usr_${cleanId.removePrefix("@")}_${UUID.randomUUID().toString().take(6)}",
                 spreDropId = cleanId,
@@ -322,29 +338,22 @@ class SpreDropRepository(private val context: Context) {
     }
 
     suspend fun acceptFriendRequest(friendId: String) {
+        val profile = userDao.getUserProfileOnce() ?: return
+        val requestId = "${friendId}_${profile.userId}"
+        databaseManager.acceptCloudFriendRequest(profile.userId, requestId)
         friendDao.updateFriendStatus(friendId, FriendStatus.FRIENDS)
-        val profile = userDao.getUserProfileOnce()
-        if (profile != null) {
-            val requestId = "req_${friendId}_${profile.spreDropId.replace("@", "")}"
-            databaseManager.updateCloudFriendRequestStatus(requestId, "ACCEPTED")
-            val friend = friendDao.getFriendById(friendId)
-            if (friend != null) {
-                val reverseRequestId = "req_${profile.userId}_${friend.spreDropId.replace("@", "")}"
-                databaseManager.updateCloudFriendRequestStatus(reverseRequestId, "ACCEPTED")
-            }
-        }
     }
 
     suspend fun rejectFriendRequest(friendId: String) {
+        val profile = userDao.getUserProfileOnce() ?: return
+        val requestId = "${friendId}_${profile.userId}"
+        databaseManager.rejectCloudFriendRequest(profile.userId, requestId)
         friendDao.deleteFriend(friendId)
-        val profile = userDao.getUserProfileOnce()
-        if (profile != null) {
-            val requestId = "req_${friendId}_${profile.spreDropId.replace("@", "")}"
-            databaseManager.updateCloudFriendRequestStatus(requestId, "REJECTED")
-        }
     }
 
     suspend fun removeFriend(friendId: String) {
+        val profile = userDao.getUserProfileOnce() ?: return
+        databaseManager.removeFriendshipInCloud(profile.userId, friendId)
         friendDao.deleteFriend(friendId)
     }
 
@@ -376,7 +385,7 @@ class SpreDropRepository(private val context: Context) {
                 receiverSpreDropId = receiver.spreDropId,
                 receiverDisplayName = receiver.displayName,
                 direction = TransferDirection.OUTGOING,
-                status = TransferStatus.NEGOTIATING_WEBRTC,
+                status = TransferStatus.CREATED,
                 totalBytes = fileSize,
                 chunkSize = 64 * 1024,
                 totalChunks = ((fileSize + 64 * 1024 - 1) / (64 * 1024)).toInt().coerceAtLeast(1),
@@ -397,6 +406,7 @@ class SpreDropRepository(private val context: Context) {
 
             // Send proposal via Firestore signaling to the actual recipient
             databaseManager.sendTransferProposal(record)
+            transferDao.updateStatus(transferId, TransferStatus.REQUESTED)
 
             // Start outgoing transfer process waiting for the real recipient's acceptance
             transferEngine.startOutgoingTransfer(

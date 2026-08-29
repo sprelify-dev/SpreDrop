@@ -205,8 +205,12 @@ class SpreDropViewModel(application: Application) : AndroidViewModel(application
 
     fun sendFriendRequest(targetSpreDropId: String, targetDisplayName: String = "") {
         viewModelScope.launch {
-            repository.sendFriendRequest(targetSpreDropId, targetDisplayName)
-            _userMessage.value = "Friend request sent to $targetSpreDropId"
+            try {
+                repository.sendFriendRequest(targetSpreDropId, targetDisplayName)
+                _userMessage.value = "Friend request sent to $targetSpreDropId"
+            } catch (e: Exception) {
+                _userMessage.value = e.message ?: "Failed to send friend request"
+            }
         }
     }
 

@@ -59,6 +59,7 @@ class SpreDropSignalingManager(
     private var cloudProposalJob: Job? = null
     private var cloudFriendRequestJob: Job? = null
     private var cloudAcceptedRequestJob: Job? = null
+    private var cloudFriendshipsJob: Job? = null
 
     private val bleManager = SpreDropBleManager(context) { blePeer ->
         handleBlePeerDiscovered(blePeer)
@@ -209,13 +210,13 @@ class SpreDropSignalingManager(
             }
         }
 
-        // Listen to real incoming friend requests from Firestore
+        // Listen to real incoming friend requests from Firestore using target Uid
         cloudFriendRequestJob?.cancel()
         cloudFriendRequestJob = signalingScope.launch {
-            databaseManager.observeIncomingCloudFriendRequests(profile.spreDropId).collect { requests ->
+            databaseManager.observeIncomingCloudFriendRequests(profile.userId).collect { requests ->
                 requests.forEach { req ->
                     val existing = friendDao.getFriendById(req.fromUserId)
-                    if (existing == null || existing.status == FriendStatus.NONE) {
+                    if (existing == null || existing.status == FriendStatus.NONE || existing.status == FriendStatus.REQUEST_SENT) {
                         val newFriend = Friend(
                             userId = req.fromUserId,
                             spreDropId = req.fromSpreDropId,
@@ -231,7 +232,7 @@ class SpreDropSignalingManager(
             }
         }
 
-        // Listen to real accepted friend requests from Firestore
+        // Listen to real accepted friend requests from Firestore to notify local UI
         cloudAcceptedRequestJob?.cancel()
         cloudAcceptedRequestJob = signalingScope.launch {
             databaseManager.observeAcceptedCloudFriendRequests(profile.spreDropId).collect { acceptedList ->
@@ -246,6 +247,28 @@ class SpreDropSignalingManager(
                             existing.displayName,
                             existing.spreDropId
                         )
+                    }
+                }
+            }
+        }
+
+        // Real-time synchronization of all friendships
+        cloudFriendshipsJob?.cancel()
+        cloudFriendshipsJob = signalingScope.launch {
+            databaseManager.observeCloudFriendships(profile.userId).collect { friendships ->
+                friendships.forEach { onlineFriend ->
+                    val existing = friendDao.getFriendById(onlineFriend.userId)
+                    if (existing == null || existing.status != FriendStatus.FRIENDS) {
+                        val newFriend = Friend(
+                            userId = onlineFriend.userId,
+                            spreDropId = onlineFriend.spreDropId,
+                            displayName = onlineFriend.displayName,
+                            avatarColorHex = onlineFriend.avatarColorHex,
+                            status = FriendStatus.FRIENDS,
+                            availability = onlineFriend.availability,
+                            lastSeen = System.currentTimeMillis()
+                        )
+                        friendDao.insertOrUpdateFriend(newFriend)
                     }
                 }
             }
@@ -392,7 +415,7 @@ class SpreDropSignalingManager(
 
     fun declineIncomingTransfer(transferId: String) {
         signalingScope.launch {
-            transferDao.updateStatus(transferId, TransferStatus.DECLINED, "Declined by user")
+            transferDao.updateStatus(transferId, TransferStatus.REJECTED, "Declined by user")
             databaseManager.updateProposalStatus(transferId, "DECLINED")
             log("SIGNAL", "Transfer $transferId declined.")
         }

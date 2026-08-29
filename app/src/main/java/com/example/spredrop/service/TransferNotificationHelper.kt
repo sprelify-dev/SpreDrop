@@ -73,8 +73,10 @@ object TransferNotificationHelper {
                 .build()
 
             NotificationManagerCompat.from(context).notify(transfer.transferId.hashCode(), notification)
-        } catch (e: Exception) {
+        } catch (e: SecurityException) {
             // Notifications may be restricted by Android permissions
+        } catch (e: Exception) {
+            // Ignored
         }
     }
 
@@ -104,6 +106,8 @@ object TransferNotificationHelper {
                 .build()
 
             NotificationManagerCompat.from(context).notify(transfer.transferId.hashCode(), notification)
+        } catch (e: SecurityException) {
+            // Ignored
         } catch (e: Exception) {
             // Ignored
         }
@@ -135,6 +139,8 @@ object TransferNotificationHelper {
                 .build()
 
             NotificationManagerCompat.from(context).notify(transfer.transferId.hashCode(), notification)
+        } catch (e: SecurityException) {
+            // Ignored
         } catch (e: Exception) {
             // Ignored
         }
@@ -162,6 +168,8 @@ object TransferNotificationHelper {
                 .build()
 
             NotificationManagerCompat.from(context).notify(spreDropId.hashCode(), notification)
+        } catch (e: SecurityException) {
+            // Ignored
         } catch (e: Exception) {
             // Ignored
         }
