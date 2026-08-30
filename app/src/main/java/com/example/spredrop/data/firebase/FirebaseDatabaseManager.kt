@@ -38,12 +38,7 @@ class FirebaseDatabaseManager {
     internal val firestore: FirebaseFirestore? by lazy {
         try {
             val app = com.google.firebase.FirebaseApp.getInstance()
-            val instance = try {
-                FirebaseFirestore.getInstance(app, "spredrop")
-            } catch (e: Exception) {
-                Log.i("FirebaseDatabaseManager", "Failed to initialize custom database 'spredrop', falling back to default instance: ${e.message}")
-                FirebaseFirestore.getInstance()
-            }
+            val instance = FirebaseFirestore.getInstance(app)
             val settings = FirebaseFirestoreSettings.Builder()
                 .setPersistenceEnabled(true)
                 .build()
@@ -785,13 +780,41 @@ class FirebaseDatabaseManager {
         }
     }
 
+    private fun getLocalIpAddress(): String {
+        try {
+            val interfaces = java.util.Collections.list(java.net.NetworkInterface.getNetworkInterfaces())
+            for (intf in interfaces) {
+                val addrs = java.util.Collections.list(intf.inetAddresses)
+                for (addr in addrs) {
+                    if (!addr.isLoopbackAddress) {
+                        val sAddr = addr.hostAddress
+                        val isIPv4 = sAddr.indexOf(':') < 0
+                        if (isIPv4) return sAddr
+                    }
+                }
+            }
+        } catch (ex: Exception) {
+            Log.e("FirebaseDatabaseManager", "Error getting local IP: ${ex.message}")
+        }
+        return ""
+    }
+
     suspend fun updateProposalStatus(transferId: String, status: String): Result<Unit> {
         val fs = firestore
         if (fs == null || !isConfigured) return Result.success(Unit)
         return try {
+            val updates = mutableMapOf<String, Any>(
+                "status" to status
+            )
+            if (status == "ACCEPTED") {
+                val localIp = getLocalIpAddress()
+                if (localIp.isNotEmpty()) {
+                    updates["receiverIp"] = localIp
+                }
+            }
             fs.collection("transfer_proposals")
                 .document(transferId)
-                .update("status", status)
+                .update(updates)
                 .await()
             Result.success(Unit)
         } catch (e: Exception) {
