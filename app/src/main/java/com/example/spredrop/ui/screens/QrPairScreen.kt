@@ -272,6 +272,7 @@ fun QrPairScreen(
                     }
                 )
                 1 -> ScanQrCodeTab(
+                    viewModel = viewModel,
                     onCodeScanned = { payload ->
                         val parsed = QrCodeGenerator.parsePairUri(payload)
                         if (parsed != null) {
@@ -419,11 +420,13 @@ fun MyQrCodeTab(
 @OptIn(ExperimentalGetImage::class)
 @Composable
 fun ScanQrCodeTab(
+    viewModel: SpreDropViewModel,
     onCodeScanned: (String) -> Unit
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     var manualInput by remember { mutableStateOf("") }
+    val checkResult by viewModel.usernameCheckResult.collectAsState()
 
     var hasCameraPermission by remember {
         mutableStateOf(
@@ -649,20 +652,59 @@ fun ScanQrCodeTab(
 
         OutlinedTextField(
             value = manualInput,
-            onValueChange = { manualInput = it },
+            onValueChange = { 
+                manualInput = it 
+                viewModel.clearUsernameCheck()
+            },
             label = { Text("Enter SpreDrop @ID or QR text") },
             placeholder = { Text("e.g. @rahul or spredrop://pair?...") },
             shape = RoundedCornerShape(12.dp),
             modifier = Modifier.fillMaxWidth()
         )
 
+        // Show live check feedback
+        if (checkResult != null) {
+            Spacer(modifier = Modifier.height(6.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.align(Alignment.Start)
+            ) {
+                when (checkResult) {
+                    "checking" -> {
+                        CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 1.5.dp, color = SpreTealPrimary)
+                        Text("Verifying user exists...", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                    }
+                    "exists" -> {
+                        Icon(Icons.Default.CheckCircle, contentDescription = null, tint = SpreOnlineGreen, modifier = Modifier.size(16.dp))
+                        Text("User exists - Friend request sent!", color = SpreOnlineGreen, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                    "not_found" -> {
+                        Icon(Icons.Default.Error, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
+                        Text("User does not exist!", color = MaterialTheme.colorScheme.error, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                    "error" -> {
+                        Icon(Icons.Default.Warning, contentDescription = null, tint = SpreAwayYellow, modifier = Modifier.size(16.dp))
+                        Text("Verification failed. Check network.", color = SpreAwayYellow, fontSize = 12.sp)
+                    }
+                }
+            }
+        }
+
         Spacer(modifier = Modifier.height(12.dp))
 
         Button(
             onClick = {
                 if (manualInput.isNotBlank()) {
-                    onCodeScanned(manualInput.trim())
-                    manualInput = ""
+                    val trimmed = manualInput.trim()
+                    if (!trimmed.startsWith("spredrop://") && !trimmed.contains("?")) {
+                        // It is a plain username / ID! Verify exists and send friend request
+                        viewModel.checkAndSendFriendRequest(trimmed)
+                    } else {
+                        // It's a full pair QR URI
+                        onCodeScanned(trimmed)
+                        manualInput = ""
+                    }
                 }
             },
             colors = ButtonDefaults.buttonColors(containerColor = SpreTealPrimary, contentColor = Color.White),
@@ -674,7 +716,7 @@ fun ScanQrCodeTab(
         ) {
             Icon(Icons.Default.Link, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(modifier = Modifier.width(8.dp))
-            Text("Pair Device Now", fontWeight = FontWeight.Bold)
+            Text("Add Friend / Pair Now", fontWeight = FontWeight.Bold)
         }
     }
 }

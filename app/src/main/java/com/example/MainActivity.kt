@@ -116,10 +116,20 @@ class MainActivity : ComponentActivity() {
                             } catch (_: Exception) {}
                         }
 
-                        SpreDropApp(
-                            viewModel = viewModel,
-                            initialDestination = intent?.getStringExtra("nav_destination") ?: Screen.Transfers.route
-                        )
+                        val isOnboardingCompleted by viewModel.isOnboardingCompleted.collectAsState()
+                        if (!isOnboardingCompleted) {
+                            OnboardingScreen(
+                                viewModel = viewModel,
+                                onOnboardingFinished = {
+                                    viewModel.completeOnboarding()
+                                }
+                            )
+                        } else {
+                            SpreDropApp(
+                                viewModel = viewModel,
+                                initialDestination = intent?.getStringExtra("nav_destination") ?: Screen.Home.route
+                            )
+                        }
                     } else {
                         AuthScreen(
                             viewModel = viewModel
@@ -134,7 +144,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun SpreDropApp(
     viewModel: SpreDropViewModel,
-    initialDestination: String = Screen.Transfers.route
+    initialDestination: String = Screen.Home.route
 ) {
     val navController = rememberNavController()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -150,6 +160,7 @@ fun SpreDropApp(
     }
 
     val screens = listOf(
+        Screen.Home,
         Screen.Transfers,
         Screen.Friends,
         Screen.QrPair,

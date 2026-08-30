@@ -36,10 +36,12 @@ fun FriendsScreen(
 ) {
     val friends by viewModel.friends.collectAsState()
     val incomingRequests by viewModel.incomingRequests.collectAsState()
+    val outgoingRequests by viewModel.outgoingRequests.collectAsState()
     val userProfile by viewModel.userProfile.collectAsState()
 
     var searchQuery by remember { mutableStateOf("") }
     var showAddFriendDialog by remember { mutableStateOf(false) }
+    var showPendingOutgoingDialog by remember { mutableStateOf(false) }
     var targetFriendForFile by remember { mutableStateOf<Friend?>(null) }
 
     val filePickerLauncher = rememberLauncherForActivityResult(
@@ -66,6 +68,99 @@ fun FriendsScreen(
                 showAddFriendDialog = false
             },
             onDismiss = { showAddFriendDialog = false }
+        )
+    }
+
+    if (showPendingOutgoingDialog) {
+        AlertDialog(
+            onDismissRequest = { showPendingOutgoingDialog = false },
+            title = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(Icons.Default.Schedule, contentDescription = null, tint = SpreTealPrimary)
+                    Text("Pending Friend Requests", fontWeight = FontWeight.Bold)
+                }
+            },
+            text = {
+                if (outgoingRequests.isEmpty()) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 16.dp)
+                    ) {
+                        Text(
+                            text = "No pending sent requests.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                } else {
+                    LazyColumn(
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        items(outgoingRequests) { req ->
+                            Surface(
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    modifier = Modifier.padding(12.dp)
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        UserAvatar(
+                                            name = req.displayName,
+                                            spreDropId = req.spreDropId,
+                                            colorHex = req.avatarColorHex,
+                                            sizeDp = 38
+                                        )
+                                        Column {
+                                            Text(
+                                                text = req.displayName,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Text(
+                                                text = req.spreDropId,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = SpreTealPrimary
+                                            )
+                                        }
+                                    }
+                                    
+                                    Surface(
+                                        color = SpreAwayYellow.copy(alpha = 0.15f),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Text(
+                                            text = "Pending",
+                                            color = SpreAwayYellow,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showPendingOutgoingDialog = false }) {
+                    Text("Close", fontWeight = FontWeight.Bold, color = SpreTealPrimary)
+                }
+            },
+            shape = RoundedCornerShape(24.dp)
         )
     }
 
@@ -114,6 +209,32 @@ fun FriendsScreen(
                         .fillMaxWidth()
                         .testTag("friends_search_field")
                 )
+            }
+
+            // Pending Friend Requests Action Button
+            item {
+                Button(
+                    onClick = { showPendingOutgoingDialog = true },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("pending_friends_requests_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Schedule,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Pending Friend Requests (${outgoingRequests.size})",
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
 
             // Incoming Requests Section

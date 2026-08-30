@@ -297,6 +297,10 @@ class SpreDropRepository(private val context: Context) {
         authManager.clearError()
     }
 
+    suspend fun getUserByUsername(username: String): UserProfile? {
+        return databaseManager.getUserByUsername(username)
+    }
+
     suspend fun sendFriendRequest(targetSpreDropId: String, targetDisplayName: String) {
         val cleanId = (if (targetSpreDropId.startsWith("@")) targetSpreDropId else "@$targetSpreDropId").lowercase().trim()
         val profile = userDao.getUserProfileOnce() ?: throw IllegalStateException("Profile not logged in")

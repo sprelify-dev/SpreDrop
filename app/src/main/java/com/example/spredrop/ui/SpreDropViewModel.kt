@@ -1,6 +1,7 @@
 package com.example.spredrop.ui
 
 import android.app.Application
+import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -35,6 +36,12 @@ class SpreDropViewModel(application: Application) : AndroidViewModel(application
 
     val incomingRequests: StateFlow<List<Friend>> = repository.incomingFriendRequests
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val outgoingRequests: StateFlow<List<Friend>> = repository.outgoingFriendRequests
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    private val _usernameCheckResult = MutableStateFlow<String?>(null)
+    val usernameCheckResult: StateFlow<String?> = _usernameCheckResult.asStateFlow()
 
     val activeTransfers: StateFlow<List<TransferRecord>> = repository.activeTransfers
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -212,6 +219,31 @@ class SpreDropViewModel(application: Application) : AndroidViewModel(application
                 _userMessage.value = e.message ?: "Failed to send friend request"
             }
         }
+    }
+
+    fun checkAndSendFriendRequest(username: String) {
+        viewModelScope.launch {
+            _usernameCheckResult.value = "checking"
+            try {
+                val clean = (if (username.startsWith("@")) username else "@$username").trim()
+                val profile = repository.getUserByUsername(clean)
+                if (profile != null) {
+                    repository.sendFriendRequest(profile.spreDropId, profile.displayName)
+                    _usernameCheckResult.value = "exists"
+                    _userMessage.value = "User found! Friend request sent to ${profile.displayName}."
+                } else {
+                    _usernameCheckResult.value = "not_found"
+                    _userMessage.value = "User '$clean' does not exist."
+                }
+            } catch (e: Exception) {
+                _usernameCheckResult.value = "error"
+                _userMessage.value = e.message ?: "Failed to verify username"
+            }
+        }
+    }
+
+    fun clearUsernameCheck() {
+        _usernameCheckResult.value = null
     }
 
     fun acceptFriendRequest(friendId: String) {
@@ -399,4 +431,81 @@ class SpreDropViewModel(application: Application) : AndroidViewModel(application
     fun clearUserMessage() {
         _userMessage.value = null
     }
+
+    private val _isOnboardingCompleted = MutableStateFlow(false)
+    val isOnboardingCompleted: StateFlow<Boolean> = _isOnboardingCompleted.asStateFlow()
+
+    init {
+        val prefs = getApplication<Application>().getSharedPreferences("spredrop_auth_prefs", Context.MODE_PRIVATE)
+        _isOnboardingCompleted.value = prefs.getBoolean("onboarding_completed", false)
+    }
+
+    fun completeOnboarding() {
+        val prefs = getApplication<Application>().getSharedPreferences("spredrop_auth_prefs", Context.MODE_PRIVATE)
+        prefs.edit().putBoolean("onboarding_completed", true).apply()
+        _isOnboardingCompleted.value = true
+    }
+
+    fun resetOnboarding() {
+        val prefs = getApplication<Application>().getSharedPreferences("spredrop_auth_prefs", Context.MODE_PRIVATE)
+        prefs.edit().putBoolean("onboarding_completed", false).apply()
+        _isOnboardingCompleted.value = false
+    }
+
+    suspend fun updatePrivacySuspending(privacy: PrivacyMode) {
+        repository.updatePrivacy(privacy)
+        if (privacy == PrivacyMode.VISIBLE || privacy == PrivacyMode.FRIENDS_ONLY) {
+            repository.updatePresence(UserPresence.AVAILABLE)
+        }
+    }
+
+    suspend fun updateIdentitySuspending(spreDropId: String, displayName: String) {
+        repository.updateProfileIdentity(spreDropId, displayName)
+    }
+
+    private val _localHardwareStatus = MutableStateFlow<HardwareRequirements?>(null)
+    val localHardwareStatus: StateFlow<HardwareRequirements?> = _localHardwareStatus.asStateFlow()
+
+    fun checkAndSetHardwareStatus(context: Context): Boolean {
+        val reqs = checkHardwareRequirements(context)
+        _localHardwareStatus.value = reqs
+        return reqs.isAllOk
+    }
+
+    fun clearHardwareStatus() {
+        _localHardwareStatus.value = null
+    }
+
+    private fun checkHardwareRequirements(context: Context): HardwareRequirements {
+        val ctx = context.applicationContext
+        
+        val wifiManager = ctx.getSystemService(Context.WIFI_SERVICE) as? android.net.wifi.WifiManager
+        val isWlanOn = wifiManager?.isWifiEnabled == true
+        
+        val bluetoothManager = ctx.getSystemService(Context.BLUETOOTH_SERVICE) as? android.bluetooth.BluetoothManager
+        val isBluetoothOn = bluetoothManager?.adapter?.isEnabled == true
+        
+        val locationManager = ctx.getSystemService(Context.LOCATION_SERVICE) as? android.location.LocationManager
+        val isLocationOn = locationManager?.let {
+            it.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER) || 
+            it.isProviderEnabled(android.location.LocationManager.NETWORK_PROVIDER)
+        } ?: false
+        
+        var isHotspotOff = true
+        try {
+            wifiManager?.let { wm ->
+                val method = wm.javaClass.getDeclaredMethod("getWifiApState")
+                val apState = method.invoke(wm) as Int
+                // 12 = WIFI_AP_STATE_ENABLING, 13 = WIFI_AP_STATE_ENABLED
+                if (apState == 12 || apState == 13) {
+                    isHotspotOff = false
+                }
+            }
+        } catch (e: Exception) {
+            // ignore
+        }
+        
+        return HardwareRequirements(isWlanOn, isBluetoothOn, isLocationOn, isHotspotOff)
+    }
 }
+

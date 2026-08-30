@@ -314,20 +314,30 @@ class SpreDropSignalingManager(
         val selfSpreDropId = selfProfile?.spreDropId?.lowercase() ?: ""
         val selfUserId = selfProfile?.userId ?: ""
 
+        val friendsMap = kotlinx.coroutines.runBlocking {
+            try {
+                friendDao.getFriendsOnce().associateBy { it.spreDropId.lowercase() }
+            } catch (e: Exception) {
+                emptyMap()
+            }
+        }
+
         val combined = mutableMapOf<String, PeerDevice>()
 
         // 1. BLE proximity peers (take priority for RSSI & connection type)
         synchronized(blePeersMap) {
             blePeersMap.forEach { (key, blePeer) ->
                 if (blePeer.deviceId != selfUserId && blePeer.spreDropId.lowercase() != selfSpreDropId) {
+                    val isFriendInDb = friendsMap.containsKey(blePeer.spreDropId.lowercase())
                     val cloudEquivalent = synchronized(cloudPeersMap) { cloudPeersMap[key] }
                     if (cloudEquivalent != null) {
                         combined[key] = blePeer.copy(
                             supportedCapabilities = cloudEquivalent.supportedCapabilities,
-                            ipAddress = cloudEquivalent.ipAddress
+                            ipAddress = cloudEquivalent.ipAddress,
+                            isFriend = isFriendInDb
                         )
                     } else {
-                        combined[key] = blePeer
+                        combined[key] = blePeer.copy(isFriend = isFriendInDb)
                     }
                 }
             }
@@ -338,7 +348,8 @@ class SpreDropSignalingManager(
             manualPeersMap.forEach { (key, peer) ->
                 if (peer.deviceId != selfUserId && peer.spreDropId.lowercase() != selfSpreDropId) {
                     if (!combined.containsKey(key)) {
-                        combined[key] = peer
+                        val isFriendInDb = friendsMap.containsKey(peer.spreDropId.lowercase())
+                        combined[key] = peer.copy(isFriend = isFriendInDb)
                     }
                 }
             }

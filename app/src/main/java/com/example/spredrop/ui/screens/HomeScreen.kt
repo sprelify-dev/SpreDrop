@@ -61,6 +61,19 @@ fun HomeScreen(
     }
 
     val context = androidx.compose.ui.platform.LocalContext.current
+    val localHardwareStatus by viewModel.localHardwareStatus.collectAsState()
+
+    // Periodically or reactively check hardware if a transfer is active
+    LaunchedEffect(activeTransfers) {
+        val hasActiveTransfer = activeTransfers.any { 
+            it.status == TransferStatus.ACCEPTED || 
+            it.status == TransferStatus.TRANSFERRING 
+        }
+        if (hasActiveTransfer) {
+            viewModel.checkAndSetHardwareStatus(context)
+        }
+    }
+
     var targetPeerForFilePick by remember { mutableStateOf<PeerDevice?>(null) }
     var showPresenceDialog by remember { mutableStateOf(false) }
 
@@ -74,7 +87,10 @@ fun HomeScreen(
     ) { uri: Uri? ->
         if (uri != null) {
             if (targetPeerForFilePick != null) {
-                viewModel.sendFileToPeer(uri, targetPeerForFilePick!!)
+                val isHardwareOk = viewModel.checkAndSetHardwareStatus(context)
+                if (isHardwareOk) {
+                    viewModel.sendFileToPeer(uri, targetPeerForFilePick!!)
+                }
                 targetPeerForFilePick = null
             } else {
                 pickedFileUri = uri
@@ -97,6 +113,132 @@ fun HomeScreen(
                 pickedFileSize = if (size > 0L) size else 1024L
             }
         }
+    }
+
+    if (localHardwareStatus != null && !localHardwareStatus!!.isAllOk) {
+        val status = localHardwareStatus!!
+        AlertDialog(
+            onDismissRequest = { viewModel.clearHardwareStatus() },
+            title = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Warning,
+                        contentDescription = null,
+                        tint = SpreAwayYellow
+                    )
+                    Text("Connection Pending", fontWeight = FontWeight.Bold)
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        text = "To establish a fast local Wi-Fi connection, please ensure the following settings are active on your device:",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        // 1. WLAN (WiFi)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (status.isWlanOn) Icons.Default.CheckCircle else Icons.Default.Cancel,
+                                contentDescription = null,
+                                tint = if (status.isWlanOn) SpreOnlineGreen else SpreErrorRed,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Text(
+                                text = "WLAN (Wi-Fi) is Open / ON",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = if (status.isWlanOn) FontWeight.Normal else FontWeight.Bold,
+                                color = if (status.isWlanOn) MaterialTheme.colorScheme.onSurface else SpreErrorRed
+                            )
+                        }
+                        
+                        // 2. Bluetooth
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (status.isBluetoothOn) Icons.Default.CheckCircle else Icons.Default.Cancel,
+                                contentDescription = null,
+                                tint = if (status.isBluetoothOn) SpreOnlineGreen else SpreErrorRed,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Text(
+                                text = "Bluetooth is ON",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = if (status.isBluetoothOn) FontWeight.Normal else FontWeight.Bold,
+                                color = if (status.isBluetoothOn) MaterialTheme.colorScheme.onSurface else SpreErrorRed
+                            )
+                        }
+                        
+                        // 3. Location
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (status.isLocationOn) Icons.Default.CheckCircle else Icons.Default.Cancel,
+                                contentDescription = null,
+                                tint = if (status.isLocationOn) SpreOnlineGreen else SpreErrorRed,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Text(
+                                text = "Location is ON (GPS)",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = if (status.isLocationOn) FontWeight.Normal else FontWeight.Bold,
+                                color = if (status.isLocationOn) MaterialTheme.colorScheme.onSurface else SpreErrorRed
+                            )
+                        }
+                        
+                        // 4. Hotspot (must be off)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (status.isHotspotOff) Icons.Default.CheckCircle else Icons.Default.Cancel,
+                                contentDescription = null,
+                                tint = if (status.isHotspotOff) SpreOnlineGreen else SpreErrorRed,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Text(
+                                text = "Hotspot is OFF / Closed",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = if (status.isHotspotOff) FontWeight.Normal else FontWeight.Bold,
+                                color = if (status.isHotspotOff) MaterialTheme.colorScheme.onSurface else SpreErrorRed
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        // Re-check status
+                        viewModel.checkAndSetHardwareStatus(context)
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = SpreTealPrimary)
+                ) {
+                    Text("Re-check / Refresh", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { viewModel.clearHardwareStatus() }
+                ) {
+                    Text("Dismiss", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            },
+            shape = RoundedCornerShape(24.dp)
+        )
     }
 
     if (showPresenceDialog) {
@@ -151,213 +293,7 @@ fun HomeScreen(
                 )
             }
 
-            // 1.5. Wi-Fi Direct Local Highway Card
-            item {
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                    ),
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Wifi,
-                                    contentDescription = null,
-                                    tint = SpreTealPrimary,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                                Column {
-                                    Text(
-                                        text = "Wi-Fi Direct Highway",
-                                        fontWeight = FontWeight.Bold,
-                                        style = MaterialTheme.typography.titleMedium
-                                    )
-                                    Text(
-                                        text = if (isWifiP2pEnabled) "Status: Enabled" else "Status: Disabled/Turning On",
-                                        fontSize = 11.sp,
-                                        color = if (isWifiP2pEnabled) SpreTealPrimary else MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
 
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Button(
-                                    onClick = { viewModel.startWifiP2pDiscovery() },
-                                    colors = ButtonDefaults.buttonColors(containerColor = SpreTealPrimary),
-                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                                    modifier = Modifier.height(32.dp)
-                                ) {
-                                    Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color.White)
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Scan", fontSize = 11.sp, color = Color.White, fontWeight = FontWeight.Bold)
-                                }
-
-                                if (wifiP2pConnectionInfo?.groupFormed == true) {
-                                    Button(
-                                        onClick = { viewModel.disconnectWifiP2p() },
-                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                                        modifier = Modifier.height(32.dp)
-                                    ) {
-                                        Text("Disconnect", fontSize = 11.sp, color = Color.White, fontWeight = FontWeight.Bold)
-                                    }
-                                }
-                            }
-                        }
-
-                        // Local Device Info
-                        wifiP2pThisDevice?.let { dev ->
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = "My P2P Device: ${dev.deviceName} (${dev.deviceAddress})",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-
-                        // Active Connection Status
-                        if (wifiP2pConnectionInfo?.groupFormed == true) {
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Surface(
-                                color = SpreTealPrimary.copy(alpha = 0.12f),
-                                shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(10.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.CloudQueue,
-                                        contentDescription = null,
-                                        tint = SpreTealPrimary,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Column {
-                                        Text(
-                                            text = "Isolated Network Established!",
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = SpreTealPrimary
-                                        )
-                                        Text(
-                                            text = "GO: ${wifiP2pConnectionInfo?.groupOwnerAddress?.hostAddress ?: "Resolving..."} | Role: ${if (wifiP2pConnectionInfo?.isGroupOwner == true) "Group Owner (Server)" else "Client"}",
-                                            fontSize = 11.sp,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                }
-                            }
-
-                            // Start direct server listener automatically if we are connected
-                            LaunchedEffect(wifiP2pConnectionInfo) {
-                                if (wifiP2pConnectionInfo?.isGroupOwner == true) {
-                                    viewModel.startP2pSocketServer { name, size, file ->
-                                        // Handle received file over Direct P2P!
-                                    }
-                                }
-                            }
-                        }
-
-                        // List Discovered Wifi Direct Peers
-                        if (wifiP2pPeers.isNotEmpty()) {
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Text(
-                                text = "Available P2P Peers:",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(bottom = 6.dp)
-                            )
-                            Column(
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                wifiP2pPeers.forEach { p2pDevice ->
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .background(MaterialTheme.colorScheme.surface)
-                                            .padding(10.dp)
-                                    ) {
-                                        Column {
-                                            Text(
-                                                text = p2pDevice.deviceName,
-                                                fontWeight = FontWeight.SemiBold,
-                                                fontSize = 13.sp
-                                            )
-                                            Text(
-                                                text = "MAC: ${p2pDevice.deviceAddress}",
-                                                fontSize = 11.sp,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                        ) {
-                                            Button(
-                                                onClick = {
-                                                    viewModel.connectToWifiP2pPeer(p2pDevice.deviceAddress)
-                                                },
-                                                colors = ButtonDefaults.buttonColors(containerColor = SpreTealPrimary),
-                                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                                                modifier = Modifier.height(28.dp)
-                                            ) {
-                                                Text("Link", fontSize = 10.sp, color = Color.White, fontWeight = FontWeight.Bold)
-                                            }
-
-                                            // Direct P2P File Sending button if a file is picked and we have connection info
-                                            if (pickedFileUri != null && wifiP2pConnectionInfo?.groupFormed == true) {
-                                                var transferProgress by remember { mutableStateOf(0L) }
-                                                IconButton(
-                                                    onClick = {
-                                                        val targetHost = wifiP2pConnectionInfo?.groupOwnerAddress?.hostAddress ?: "192.168.49.1"
-                                                        viewModel.sendFileDirectly(
-                                                            uri = pickedFileUri!!,
-                                                            host = targetHost,
-                                                            onProgress = { sent -> transferProgress = sent },
-                                                            onSuccess = {
-                                                                pickedFileUri = null
-                                                                pickedFileName = null
-                                                                pickedFileSize = null
-                                                            }
-                                                        )
-                                                    },
-                                                    modifier = Modifier.size(28.dp)
-                                                ) {
-                                                    Icon(
-                                                        imageVector = Icons.Default.Send,
-                                                        contentDescription = "Direct Stream Payload",
-                                                        tint = SpreCyanAccent,
-                                                        modifier = Modifier.size(18.dp)
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
 
             // Ready to Send Selected File Banner
             if (pickedFileUri != null) {
@@ -478,7 +414,12 @@ fun HomeScreen(
                 items(activeTransfers, key = { it.transferId }) { transfer ->
                     ActiveTransferCard(
                         transfer = transfer,
-                        onAccept = { viewModel.acceptIncomingTransfer(transfer) },
+                        onAccept = {
+                            val isHardwareOk = viewModel.checkAndSetHardwareStatus(context)
+                            if (isHardwareOk) {
+                                viewModel.acceptIncomingTransfer(transfer)
+                            }
+                        },
                         onDecline = { viewModel.declineIncomingTransfer(transfer.transferId) },
                         onCancel = { viewModel.cancelTransfer(transfer.transferId) },
                         onClick = onNavigateToTransfers
@@ -538,17 +479,20 @@ fun HomeScreen(
                 }
             } else {
                 items(discoveredPeers, key = { it.deviceId }) { peer ->
-                    DiscoveredPeerCard(
+                    RadarDiscoveredPeerCard(
                         peer = peer,
                         onSendFile = {
-                            if (pickedFileUri != null) {
-                                viewModel.sendFileToPeer(pickedFileUri!!, peer)
-                                pickedFileUri = null
-                                pickedFileName = null
-                                pickedFileSize = null
-                            } else {
-                                targetPeerForFilePick = peer
-                                filePickerLauncher.launch("*/*")
+                            val isHardwareOk = viewModel.checkAndSetHardwareStatus(context)
+                            if (isHardwareOk) {
+                                if (pickedFileUri != null) {
+                                    viewModel.sendFileToPeer(pickedFileUri!!, peer)
+                                    pickedFileUri = null
+                                    pickedFileName = null
+                                    pickedFileSize = null
+                                } else {
+                                    targetPeerForFilePick = peer
+                                    filePickerLauncher.launch("*/*")
+                                }
                             }
                         },
                         onAddFriend = {
@@ -923,6 +867,109 @@ fun getDistanceInfo(rssi: Int): Triple<Int, String, Color> {
     }
     
     return Triple(percentage, label, color)
+}
+
+@Composable
+fun RadarDiscoveredPeerCard(
+    peer: PeerDevice,
+    onSendFile: () -> Unit,
+    onAddFriend: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val distanceColor = when {
+        peer.signalStrengthRssi >= -60 -> Color(0xFF10B981) // Green
+        peer.signalStrengthRssi > -80 -> Color(0xFFF59E0B) // Orange
+        else -> Color(0xFFEF4444) // Red
+    }
+
+    Surface(
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+        shape = RoundedCornerShape(20.dp),
+        tonalElevation = 2.dp,
+        border = androidx.compose.foundation.BorderStroke(2.dp, distanceColor.copy(alpha = 0.7f)),
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp)
+        ) {
+            // 1. Name Logo with distance color ring glowing around it
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .size(54.dp)
+                    .clip(CircleShape)
+                    .background(distanceColor.copy(alpha = 0.15f))
+                    .border(2.dp, distanceColor, CircleShape)
+            ) {
+                UserAvatar(
+                    name = peer.displayName,
+                    spreDropId = peer.spreDropId,
+                    presence = null, // No extra online green/offline gray status dot
+                    colorHex = peer.avatarColorHex,
+                    sizeDp = 42
+                )
+            }
+
+            // 2. Actions: Send File & Add Friend (or Friendship Symbol)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Send File Icon Button
+                IconButton(
+                    onClick = onSendFile,
+                    modifier = Modifier
+                        .size(46.dp)
+                        .background(SpreTealPrimary, CircleShape)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Send,
+                        contentDescription = "Send File",
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                // Add Friend Icon Button OR Friendship Symbol
+                if (peer.isFriend) {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .size(46.dp)
+                            .background(Color(0xFFF59E0B).copy(alpha = 0.2f), CircleShape)
+                            .border(1.5.dp, Color(0xFFF59E0B), CircleShape)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Favorite, // Friendship Symbol
+                            contentDescription = "Already Friends",
+                            tint = Color(0xFFF59E0B),
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                } else {
+                    IconButton(
+                        onClick = onAddFriend,
+                        modifier = Modifier
+                            .size(46.dp)
+                            .background(MaterialTheme.colorScheme.secondaryContainer, CircleShape)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PersonAdd,
+                            contentDescription = "Add Friend",
+                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable

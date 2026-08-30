@@ -201,3 +201,16 @@ data class DevLogEntry(
     val message: String,
     val level: String = "INFO" // INFO, WEBRTC, SIGNAL, ERROR, CHUNK
 )
+
+/**
+ * Requirements verification status representing local device settings status
+ */
+data class HardwareRequirements(
+    val isWlanOn: Boolean = true,
+    val isBluetoothOn: Boolean = true,
+    val isLocationOn: Boolean = true,
+    val isHotspotOff: Boolean = true
+) {
+    val isAllOk: Boolean get() = isWlanOn && isBluetoothOn && isLocationOn && isHotspotOff
+}
+
