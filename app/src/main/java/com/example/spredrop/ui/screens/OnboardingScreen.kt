@@ -43,11 +43,22 @@ fun OnboardingScreen(
     val focusManager = LocalFocusManager.current
 
     // Setup input fields initialized with default user profile values
-    var tempDisplayName by remember(userProfile) { mutableStateOf(userProfile?.displayName ?: "") }
-    var tempSpreDropId by remember(userProfile) { mutableStateOf(userProfile?.spreDropId ?: "") }
-    var tempVisibility by remember(userProfile) { mutableStateOf(userProfile?.visibility ?: PrivacyMode.VISIBLE) }
+    var hasInitialized by remember { mutableStateOf(false) }
+    var tempDisplayName by remember { mutableStateOf("") }
+    var tempSpreDropId by remember { mutableStateOf("") }
+    var tempVisibility by remember { mutableStateOf(PrivacyMode.VISIBLE) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var isSaving by remember { mutableStateOf(false) }
+
+    LaunchedEffect(userProfile) {
+        val profile = userProfile
+        if (profile != null && !hasInitialized) {
+            tempDisplayName = profile.displayName
+            tempSpreDropId = profile.spreDropId
+            tempVisibility = profile.visibility
+            hasInitialized = true
+        }
+    }
 
     Box(
         modifier = modifier

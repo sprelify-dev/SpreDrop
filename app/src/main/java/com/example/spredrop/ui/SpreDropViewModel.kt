@@ -133,10 +133,51 @@ class SpreDropViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    fun canChangeIdentity(): Boolean {
+        val prefs = getApplication<android.app.Application>().getSharedPreferences("spredrop_auth_prefs", android.content.Context.MODE_PRIVATE)
+        val lastUpdated = prefs.getLong("last_identity_updated", 0L)
+        if (lastUpdated == 0L) return true
+        
+        val diffMillis = System.currentTimeMillis() - lastUpdated
+        val fourteenDaysInMillis = 14L * 24L * 60L * 60L * 1000L
+        return diffMillis >= fourteenDaysInMillis
+    }
+
+    fun getDaysUntilNextIdentityChange(): Int {
+        val prefs = getApplication<android.app.Application>().getSharedPreferences("spredrop_auth_prefs", android.content.Context.MODE_PRIVATE)
+        val lastUpdated = prefs.getLong("last_identity_updated", 0L)
+        if (lastUpdated == 0L) return 0
+        
+        val diffMillis = System.currentTimeMillis() - lastUpdated
+        val fourteenDaysInMillis = 14L * 24L * 60L * 60L * 1000L
+        if (diffMillis >= fourteenDaysInMillis) return 0
+        
+        val remainingMillis = fourteenDaysInMillis - diffMillis
+        val remainingDays = (remainingMillis + (24L * 60L * 60L * 1000L - 1)) / (24L * 60L * 60L * 1000L)
+        return remainingDays.toInt()
+    }
+
     fun updateIdentity(spreDropId: String, displayName: String) {
+        val currentProfile = userProfile.value
+        val cleanId = spreDropId.trim()
+        val cleanName = displayName.trim()
+        
+        val isSpreDropIdChanged = currentProfile != null && currentProfile.spreDropId != cleanId
+        val isDisplayNameChanged = currentProfile != null && currentProfile.displayName != cleanName
+        
+        if ((isSpreDropIdChanged || isDisplayNameChanged) && !canChangeIdentity() && isOnboardingCompleted.value) {
+            val remainingDays = getDaysUntilNextIdentityChange()
+            _userMessage.value = "Username or name can only be changed once in 14 days. ($remainingDays days remaining)"
+            return
+        }
+
         viewModelScope.launch {
-            repository.updateProfileIdentity(spreDropId, displayName)
-            _userMessage.value = "Profile identity updated to $spreDropId"
+            repository.updateProfileIdentity(cleanId, cleanName)
+            if ((isSpreDropIdChanged || isDisplayNameChanged) && isOnboardingCompleted.value) {
+                val prefs = getApplication<android.app.Application>().getSharedPreferences("spredrop_auth_prefs", android.content.Context.MODE_PRIVATE)
+                prefs.edit().putLong("last_identity_updated", System.currentTimeMillis()).apply()
+            }
+            _userMessage.value = "Profile identity updated to $cleanId"
         }
     }
 

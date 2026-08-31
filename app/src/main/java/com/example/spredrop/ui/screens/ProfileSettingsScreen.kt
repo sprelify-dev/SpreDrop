@@ -76,6 +76,8 @@ fun ProfileSettingsScreen(
         EditProfileDialog(
             currentDisplayName = userProfile!!.displayName,
             currentSpreDropId = userProfile!!.spreDropId,
+            canChange = viewModel.canChangeIdentity(),
+            daysRemaining = viewModel.getDaysUntilNextIdentityChange(),
             onSave = { newId, newName ->
                 viewModel.updateIdentity(newId, newName)
                 showEditProfileDialog = false
@@ -566,22 +568,57 @@ fun ProfileSettingsScreen(
 fun EditProfileDialog(
     currentDisplayName: String,
     currentSpreDropId: String,
+    canChange: Boolean,
+    daysRemaining: Int,
     onSave: (spreDropId: String, displayName: String) -> Unit,
     onDismiss: () -> Unit
 ) {
     var displayName by remember { mutableStateOf(currentDisplayName) }
     var spreDropId by remember { mutableStateOf(currentSpreDropId) }
 
+    val isChanged = displayName.trim() != currentDisplayName || spreDropId.trim() != currentSpreDropId
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Edit SpreDrop Identity", fontWeight = FontWeight.Bold) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (!canChange) {
+                    Surface(
+                        color = SpreErrorRed.copy(alpha = 0.12f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, SpreErrorRed),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.padding(10.dp)
+                        ) {
+                            Icon(Icons.Default.Warning, contentDescription = null, tint = SpreErrorRed, modifier = Modifier.size(16.dp))
+                            Text(
+                                text = "Username or name can only be changed once in 14 days. ($daysRemaining days remaining)",
+                                color = SpreErrorRed,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+                } else {
+                    Text(
+                        text = "Note: You can only change your username or display name once every 14 days.",
+                        color = SpreCyanAccent,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+
                 OutlinedTextField(
                     value = displayName,
                     onValueChange = { displayName = it },
                     label = { Text("Display Name") },
                     shape = RoundedCornerShape(12.dp),
+                    enabled = canChange || !isChanged,
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
@@ -590,6 +627,7 @@ fun EditProfileDialog(
                     label = { Text("SpreDrop ID") },
                     placeholder = { Text("@username") },
                     shape = RoundedCornerShape(12.dp),
+                    enabled = canChange || !isChanged,
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -597,6 +635,7 @@ fun EditProfileDialog(
         confirmButton = {
             Button(
                 onClick = { onSave(spreDropId.trim(), displayName.trim()) },
+                enabled = canChange || !isChanged,
                 colors = ButtonDefaults.buttonColors(containerColor = SpreTealPrimary)
             ) {
                 Text("Save")
